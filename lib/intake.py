@@ -380,56 +380,35 @@ def _is_buyma_reference_url(url: str) -> bool:
     return bool(u) and "buyma.com" in u.lower() and is_buyma_item_url(u)
 
 
-def _run_auto_intake(
-    *,
-    buyma_url: str,
-    brand_hint: str = "",
-    product_hint: str = "",
-    style_id_hint: str = "",
-    buyma_price_hint: float = 0.0,
-    category: str = "バッグ",
-    model_year: int = 2025,
-    upsert_name: str = "",
-    skip_low_grades: bool = True,
-    preset_candidate_urls: Optional[list[str]] = None,
-    use_funnel: bool = True,
-) -> "AutoIntakeOutcome":
-    """BUYMA URL を起点に仕入先探索〜シート反映までを非対話で実行する。"""
-    from lib.intake_funnel import (
-        AutoIntakeOutcome,
-        SKIP_BUYMA_FETCH,
-        is_eyewear_product_name,
-        SKIP_LOW_GRADE,
-        SKIP_NO_PRICE,
-        SKIP_NO_SELL_PRICE,
-        SKIP_NO_SUPPLY,
-        SKIP_OUT_OF_SCOPE,
-        is_non_apparel_product_name,
-    )
+def _auto_fetch_buyma_info(buyma_url: str) -> Optional[object]:
+    """Step 1: BUYMA ページから商品情報を取得する。"""
     from lib.buyma_item_parser import fetch_buyma_item_info_sync
-    from lib.supply_url_finder import discover_supply_urls_funnel, discover_supply_urls_sync
-
-    buyma_url = buyma_url.strip()
-    if not _is_buyma_reference_url(buyma_url):
-        print(f"  ❌ BUYMA 商品 URL ではありません: {buyma_url}")
-        return AutoIntakeOutcome(False, SKIP_NO_SUPPLY)
 
     _print_step(1, "BUYMA 商品情報の取得（自動）")
     print(f"  URL: {buyma_url[:70]}")
     print("  ページを取得中（10〜30秒）...")
-    info = fetch_buyma_item_info_sync(buyma_url)
-    if not info:
-        print("  ❌ BUYMA ページの取得に失敗しました。")
-        return AutoIntakeOutcome(False, SKIP_BUYMA_FETCH)
+    return fetch_buyma_item_info_sync(buyma_url)
 
-    from lib.product_identity import MatchScore, VariantKey, score_when_no_supply
+
+def _auto_extract_product_identity(
+    info: object,
+    product_hint: str,
+    brand_hint: str,
+    style_id_hint: str,
+    category: str,
+) -> Optional[tuple]:
+    """Step 1b: BUYMA ページ情報からブランド・商品名・型番等を抽出する。
+
+    Returns:
+        (brand, product_name, raw_product_name, variant, sheet_style_id,
+         supply_style_id, buyma_style_id, page_price_jpy) or None on failure.
+    """
+    from lib.product_identity import VariantKey
     from lib.supply_search_utils import (
         clean_product_name_for_search,
         dedupe_product_phrase,
         resolve_merchandise_brand,
         resolve_style_id_for_supply_search,
-        style_id_for_matching,
-        url_is_valid_supply_candidate as _url_valid_supply,
     )
 
     raw_product_name = dedupe_product_phrase(
@@ -475,73 +454,71 @@ def _run_auto_intake(
 
     if not brand or not product_name:
         print("  ❌ ブランドまたは商品名を取得できませんでした。")
-        return AutoIntakeOutcome(False, SKIP_BUYMA_FETCH)
+        return None
 
-    if is_non_apparel_product_name(f"{brand} {product_name}") or is_non_apparel_product_name(
-        raw_product_name
-    ):
-        print(
-            "  ⏭️  香水・コスメは自動仕入れ検討の対象外です（バッグ・財布向けの探索のため）。"
-        )
-        print("  → py intake.py で仕入先 URL を手動で貼ってください。")
-        return AutoIntakeOutcome(False, SKIP_OUT_OF_SCOPE)
-
-    preset_supply = [
-        u for u in (preset_candidate_urls or [])
-        if u.strip() and "buyma.com" not in u.lower()
-    ]
-
-    official_match = None
-    from lib.funnel_policy import official_prada_enabled
-
-    if brand == "PRADA" and supply_style_id and official_prada_enabled():
-        _print_step(1.5, "PRADA 公式カタログ照合（prada.com）")
-        from lib.official_catalog.prada import lookup_prada_official_sync
-
-        print("  型番を公式 SKU と突合（F12/XHR・JSON-LD・DDG）...")
-        official_match = lookup_prada_official_sync(
-            supply_style_id,
-            product_name=raw_product_name or product_name,
-            use_playwright=True,
-        )
-        if official_match:
-            print(f"  公式SKU:  {official_match.sku}")
-            if official_match.english_name:
-                print(f"  英語名:   {official_match.english_name}")
-            if official_match.product_url:
-                print(f"  公式URL:  {official_match.product_url[:75]}")
-            print(f"  ({official_match.identity_note})")
-        else:
-            print(
-                "  ⚠️  公式照合なし（ローカルで scripts/capture_prada_f12.py を実行可能）"
-            )
-            if is_eyewear_product_name(f"{brand} {product_name}"):
-                print(
-                    "  → サングラスは探索が難しい場合があります。"
-                    "失敗時は候補URLsに仕入URLを貼って再実行してください。"
-                )
-
-    _print_step(2, "BUYMA 需要確認（自動）")
-    demand = _run_demand_check(
-        brand,
-        product_name,
-        display_name=f"{brand} {product_name}",
+    return (
+        brand, product_name, raw_product_name, variant,
+        sheet_style_id, supply_style_id, buyma_style_id, page_price_jpy,
     )
-    print(demand.summary())
 
-    buyma_price = _resolve_buyma_price_auto(demand, page_price_jpy)
-    if buyma_price_hint > 0 and buyma_price <= 0:
-        buyma_price = buyma_price_hint
-        print(f"  → シートの参考価格 ¥{int(buyma_price):,} を使用します。")
-    if buyma_price <= 0:
-        print("  ❌ 売価を決定できませんでした。手動で intake.py を実行してください。")
-        return AutoIntakeOutcome(False, SKIP_NO_SELL_PRICE)
+
+def _auto_check_prada_official(
+    brand: str,
+    supply_style_id: str,
+    raw_product_name: str,
+    product_name: str,
+) -> Optional[object]:
+    """Step 1.5: PRADA 公式カタログとの型番照合。"""
+    from lib.funnel_policy import official_prada_enabled
+    from lib.intake_funnel import is_eyewear_product_name
+
+    if brand != "PRADA" or not supply_style_id or not official_prada_enabled():
+        return None
+
+    _print_step(1.5, "PRADA 公式カタログ照合（prada.com）")
+    from lib.official_catalog.prada import lookup_prada_official_sync
+
+    print("  型番を公式 SKU と突合（F12/XHR・JSON-LD・DDG）...")
+    official_match = lookup_prada_official_sync(
+        supply_style_id,
+        product_name=raw_product_name or product_name,
+        use_playwright=True,
+    )
+    if official_match:
+        print(f"  公式SKU:  {official_match.sku}")
+        if official_match.english_name:
+            print(f"  英語名:   {official_match.english_name}")
+        if official_match.product_url:
+            print(f"  公式URL:  {official_match.product_url[:75]}")
+        print(f"  ({official_match.identity_note})")
+    else:
+        print(
+            "  ⚠️  公式照合なし（ローカルで scripts/capture_prada_f12.py を実行可能）"
+        )
+        if is_eyewear_product_name(f"{brand} {product_name}"):
+            print(
+                "  → サングラスは探索が難しい場合があります。"
+                "失敗時は候補URLsに仕入URLを貼って再実行してください。"
+            )
+    return official_match
+
+
+def _auto_search_supply_urls(
+    brand: str,
+    product_name: str,
+    supply_style_id: str,
+    raw_product_name: str,
+    official_match: Optional[object],
+    preset_candidate_urls: Optional[list[str]],
+    use_funnel: bool,
+) -> list[str]:
+    """Step 3: 仕入先 URL の自動探索。"""
+    from lib.supply_url_finder import discover_supply_urls_funnel, discover_supply_urls_sync
+    from lib.supply_search_utils import url_is_valid_supply_candidate as _url_valid_supply
 
     _print_step(3, "仕入先 URL の自動探索")
 
     class _Step3Log(list):
-        """Step3 の進捗を即時表示（site: 検索中に止まって見える問題対策）。"""
-
         def append(self, item: object) -> None:
             print(item, flush=True)
             super().append(str(item))
@@ -581,49 +558,37 @@ def _run_auto_intake(
     if supply and not search_log:
         for s in supply:
             print(f"    {s.site_name}: {s.product_url[:65]}")
+    return candidate_urls
 
-    if not candidate_urls:
-        print("  ❌ 仕入先 URL を自動取得できませんでした。")
-        print("  → 手動モード: py intake.py で URL を貼り付けてください。")
-        return AutoIntakeOutcome(False, SKIP_NO_SUPPLY)
 
-    currency = _guess_currency_from_url(candidate_urls[0])
-    exchange_rate = _get_exchange_rate_auto(currency)
-
-    _print_step(4, f"{len(candidate_urls)}件のURLを並列スクレイプ（自動）")
-    match_style_id = style_id_for_matching(sheet_style_id, buyma_style_id)
-    source_url, source_price, match_score, scraped_style_id, stock_status = (
-        _scrape_and_select(
-            candidate_urls=candidate_urls,
-            buyma_price=buyma_price,
-            exchange_rate=exchange_rate,
-            buyma_style_id=match_style_id,
-            brand=brand,
-            variant=variant,
-        )
-    )
-
-    if source_url:
-        currency = _guess_currency_from_url(source_url)
-        exchange_rate = _get_exchange_rate_auto(currency)
-
-    if source_price <= 0 or not (source_url or "").strip():
-        if match_score is None:
-            match_score = score_when_no_supply(variant, reason="価格・URL未取得")
-        print(match_score.format_console())
-        print(
-            "  ⚠️  仕入先の価格・在庫を取得できませんでした。"
-            "誤ったURLをシートに書かないため、反映をスキップします。"
-        )
-        from lib.funnel_policy import rescue_hint
-
-        print(f"  → {rescue_hint()}")
-        print("  → または py intake.py で正しい新品の商品URLを貼って再登録してください。")
-        print(
-            "  ※ FARFETCH で ¥数十万が出る場合、定価>転売価格で利益マイナスになることがあります。"
-            "ブラウザで価格を確認して手動 intake が確実です。"
-        )
-        return AutoIntakeOutcome(False, SKIP_NO_PRICE)
+def _auto_evaluate_and_write(
+    *,
+    brand: str,
+    product_name: str,
+    category: str,
+    model_year: int,
+    source_url: str,
+    source_price: float,
+    currency: str,
+    exchange_rate: float,
+    buyma_price: float,
+    demand: "BUYMADemandSignal",
+    candidate_urls: list[str],
+    sheet_style_id: str,
+    buyma_style_id: str,
+    supply_style_id: str,
+    match_score: Optional[object],
+    scraped_style_id: str,
+    stock_status: str,
+    variant: object,
+    official_match: Optional[object],
+    upsert_name: str,
+    skip_low_grades: bool,
+) -> "AutoIntakeOutcome":
+    """Steps 5-6: グレード判定・シート書き込み。"""
+    from lib.intake_funnel import AutoIntakeOutcome, SKIP_LOW_GRADE, SKIP_NO_PRICE
+    from lib.product_identity import summarize_best_source_result
+    from lib.supply_search_utils import style_id_for_matching
 
     _print_step(5, "仕入れ判断（自動）")
     score = _evaluate(
@@ -639,8 +604,7 @@ def _run_auto_intake(
         print(f"  ⚠️  グレード {score.grade} のためシート反映をスキップしました。")
         return AutoIntakeOutcome(False, SKIP_LOW_GRADE)
 
-    from lib.product_identity import summarize_best_source_result
-
+    match_style_id = style_id_for_matching(sheet_style_id, buyma_style_id)
     match_score = summarize_best_source_result(
         variant,
         best_url=source_url,
@@ -681,6 +645,163 @@ def _run_auto_intake(
             )
         return AutoIntakeOutcome(True)
     return AutoIntakeOutcome(False, SKIP_NO_PRICE)
+
+
+def _run_auto_intake(
+    *,
+    buyma_url: str,
+    brand_hint: str = "",
+    product_hint: str = "",
+    style_id_hint: str = "",
+    buyma_price_hint: float = 0.0,
+    category: str = "バッグ",
+    model_year: int = 2025,
+    upsert_name: str = "",
+    skip_low_grades: bool = True,
+    preset_candidate_urls: Optional[list[str]] = None,
+    use_funnel: bool = True,
+) -> "AutoIntakeOutcome":
+    """BUYMA URL を起点に仕入先探索〜シート反映までを非対話で実行する。"""
+    from lib.intake_funnel import (
+        AutoIntakeOutcome,
+        SKIP_BUYMA_FETCH,
+        SKIP_NO_PRICE,
+        SKIP_NO_SELL_PRICE,
+        SKIP_NO_SUPPLY,
+        SKIP_OUT_OF_SCOPE,
+        is_non_apparel_product_name,
+    )
+    from lib.product_identity import score_when_no_supply
+    from lib.supply_search_utils import style_id_for_matching
+
+    buyma_url = buyma_url.strip()
+    if not _is_buyma_reference_url(buyma_url):
+        print(f"  ❌ BUYMA 商品 URL ではありません: {buyma_url}")
+        return AutoIntakeOutcome(False, SKIP_NO_SUPPLY)
+
+    # Step 1: BUYMA 商品情報取得
+    info = _auto_fetch_buyma_info(buyma_url)
+    if not info:
+        print("  ❌ BUYMA ページの取得に失敗しました。")
+        return AutoIntakeOutcome(False, SKIP_BUYMA_FETCH)
+
+    # Step 1b: 商品情報の抽出
+    identity = _auto_extract_product_identity(
+        info, product_hint, brand_hint, style_id_hint, category,
+    )
+    if identity is None:
+        return AutoIntakeOutcome(False, SKIP_BUYMA_FETCH)
+
+    (
+        brand, product_name, raw_product_name, variant,
+        sheet_style_id, supply_style_id, buyma_style_id, page_price_jpy,
+    ) = identity
+
+    # スコープチェック
+    if is_non_apparel_product_name(f"{brand} {product_name}") or is_non_apparel_product_name(
+        raw_product_name
+    ):
+        print(
+            "  ⏭️  香水・コスメは自動仕入れ検討の対象外です（バッグ・財布向けの探索のため）。"
+        )
+        print("  → py intake.py で仕入先 URL を手動で貼ってください。")
+        return AutoIntakeOutcome(False, SKIP_OUT_OF_SCOPE)
+
+    # Step 1.5: PRADA 公式照合
+    official_match = _auto_check_prada_official(
+        brand, supply_style_id, raw_product_name, product_name,
+    )
+
+    # Step 2: 需要確認
+    _print_step(2, "BUYMA 需要確認（自動）")
+    demand = _run_demand_check(
+        brand,
+        product_name,
+        display_name=f"{brand} {product_name}",
+    )
+    print(demand.summary())
+
+    buyma_price = _resolve_buyma_price_auto(demand, page_price_jpy)
+    if buyma_price_hint > 0 and buyma_price <= 0:
+        buyma_price = buyma_price_hint
+        print(f"  → シートの参考価格 ¥{int(buyma_price):,} を使用します。")
+    if buyma_price <= 0:
+        print("  ❌ 売価を決定できませんでした。手動で intake.py を実行してください。")
+        return AutoIntakeOutcome(False, SKIP_NO_SELL_PRICE)
+
+    # Step 3: 仕入先探索
+    candidate_urls = _auto_search_supply_urls(
+        brand, product_name, supply_style_id, raw_product_name,
+        official_match, preset_candidate_urls, use_funnel,
+    )
+    if not candidate_urls:
+        print("  ❌ 仕入先 URL を自動取得できませんでした。")
+        print("  → 手動モード: py intake.py で URL を貼り付けてください。")
+        return AutoIntakeOutcome(False, SKIP_NO_SUPPLY)
+
+    # Step 4: スクレイプ
+    currency = _guess_currency_from_url(candidate_urls[0])
+    exchange_rate = _get_exchange_rate_auto(currency)
+
+    _print_step(4, f"{len(candidate_urls)}件のURLを並列スクレイプ（自動）")
+    match_style_id = style_id_for_matching(sheet_style_id, buyma_style_id)
+    source_url, source_price, match_score, scraped_style_id, stock_status = (
+        _scrape_and_select(
+            candidate_urls=candidate_urls,
+            buyma_price=buyma_price,
+            exchange_rate=exchange_rate,
+            buyma_style_id=match_style_id,
+            brand=brand,
+            variant=variant,
+        )
+    )
+
+    if source_url:
+        currency = _guess_currency_from_url(source_url)
+        exchange_rate = _get_exchange_rate_auto(currency)
+
+    if source_price <= 0 or not (source_url or "").strip():
+        if match_score is None:
+            match_score = score_when_no_supply(variant, reason="価格・URL未取得")
+        print(match_score.format_console())
+        print(
+            "  ⚠️  仕入先の価格・在庫を取得できませんでした。"
+            "誤ったURLをシートに書かないため、反映をスキップします。"
+        )
+        from lib.funnel_policy import rescue_hint
+
+        print(f"  → {rescue_hint()}")
+        print("  → または py intake.py で正しい新品の商品URLを貼って再登録してください。")
+        print(
+            "  ※ FARFETCH で ¥数十万が出る場合、定価>転売価格で利益マイナスになることがあります。"
+            "ブラウザで価格を確認して手動 intake が確実です。"
+        )
+        return AutoIntakeOutcome(False, SKIP_NO_PRICE)
+
+    # Steps 5-6: 評価・シート書き込み
+    return _auto_evaluate_and_write(
+        brand=brand,
+        product_name=product_name,
+        category=category,
+        model_year=model_year,
+        source_url=source_url,
+        source_price=source_price,
+        currency=currency,
+        exchange_rate=exchange_rate,
+        buyma_price=buyma_price,
+        demand=demand,
+        candidate_urls=candidate_urls,
+        sheet_style_id=sheet_style_id,
+        buyma_style_id=buyma_style_id,
+        supply_style_id=supply_style_id,
+        match_score=match_score,
+        scraped_style_id=scraped_style_id,
+        stock_status=stock_status,
+        variant=variant,
+        official_match=official_match,
+        upsert_name=upsert_name,
+        skip_low_grades=skip_low_grades,
+    )
 
 
 def _resolve_buyma_price_auto(
