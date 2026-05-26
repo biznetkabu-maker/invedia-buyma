@@ -24,3 +24,5 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev,browser]"
       - run: pytest -q
+      - name: mypy type check
+        run: mypy lib/config.py lib/profit_calculator.py lib/file_lock.py lib/logging_config.py --no-error-summary || true
