@@ -3,15 +3,15 @@ LINE 通知モジュール。
 
 お宝商品（利益 ≥ 指定額）が見つかった際に LINE へ通知する。
 
-2つの送信方式に対応:
-  1. LINE Notify  : トークン1本で使える軽量な通知API（個人向け）
-  2. LINE Messaging API: チャンネルBot経由の本格通知（チーム向け）
+送信方式:
+  - LINE Messaging API: チャンネルBot経由の通知（推奨）
+  - LINE Notify       : 非推奨（2025年3月末廃止済み、フォールバックのみ）
 
 環境変数:
-  LINE_NOTIFY_TOKEN         : LINE Notify アクセストークン
   LINE_CHANNEL_ACCESS_TOKEN : LINE Messaging API チャンネルアクセストークン
   LINE_USER_ID              : 送信先ユーザーID または グループID
   LINE_PROFIT_THRESHOLD     : 通知する利益額のしきい値（default: 30000）
+  LINE_NOTIFY_TOKEN         : (非推奨) LINE Notify アクセストークン
 """
 
 from __future__ import annotations
@@ -70,16 +70,23 @@ class NotificationResult:
 # ============================================================================
 
 class LINENotifyClient:
-    """LINE Notify API クライアント（最もシンプルな通知手段）。
+    """LINE Notify API クライアント（非推奨: 2025年3月末廃止済み）。
 
-    セットアップ:
-      1. https://notify-bot.line.me/ja/ にアクセス
-      2. 「トークン」を発行
-      3. LINE_NOTIFY_TOKEN 環境変数に設定
+    LINE Messaging API への移行を推奨します。
+    このクライアントは Messaging API が利用不可な場合の
+    フォールバックとしてのみ残されています。
     """
 
     def __init__(self, token: str | None = None) -> None:
         self._token = token or os.getenv("LINE_NOTIFY_TOKEN", "")
+        if self._token:
+            import warnings
+            warnings.warn(
+                "LINE Notify API は 2025年3月末に廃止されました。"
+                "LINE Messaging API (LINE_CHANNEL_ACCESS_TOKEN) への移行を推奨します。",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     @property
     def is_configured(self) -> bool:
@@ -155,6 +162,38 @@ class LINEMessagingClient:
     @property
     def is_configured(self) -> bool:
         return bool(self._token and self._user_id)
+
+    def send_text(self, message: str) -> NotificationResult:
+        """テキストメッセージを送信する。"""
+        if not self.is_configured:
+            return NotificationResult(
+                success=False, method="LINE Messaging API",
+                error="LINE_CHANNEL_ACCESS_TOKEN / LINE_USER_ID が未設定"
+            )
+        payload = {
+            "to": self._user_id,
+            "messages": [{"type": "text", "text": message[:5000]}],
+        }
+        try:
+            resp = requests.post(
+                _LINE_MESSAGING_API,
+                headers={
+                    "Authorization": f"Bearer {self._token}",
+                    "Content-Type": "application/json",
+                },
+                data=json.dumps(payload, ensure_ascii=False),
+                timeout=15,
+            )
+            resp.raise_for_status()
+            logger.info("LINE Messaging API テキスト送信成功")
+            return NotificationResult(success=True, method="LINE Messaging API")
+        except requests.HTTPError:
+            err = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            logger.error("LINE Messaging API テキスト送信失敗: %s", err)
+            return NotificationResult(success=False, method="LINE Messaging API", error=err)
+        except Exception as e:
+            logger.error("LINE Messaging API 例外: %s", e)
+            return NotificationResult(success=False, method="LINE Messaging API", error=str(e))
 
     def send_treasure_card(self, alerts: list[TreasureAlert]) -> NotificationResult:
         """Flex Message でお宝商品カードを送信する。"""
@@ -290,7 +329,10 @@ class LINENotifier:
         messaging_user_id: str | None = None,
         profit_threshold: float | None = None,
     ) -> None:
-        self._notify = LINENotifyClient(notify_token)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self._notify = LINENotifyClient(notify_token)
         self._messaging = LINEMessagingClient(messaging_token, messaging_user_id)
         self._threshold = profit_threshold or float(
             os.getenv("LINE_PROFIT_THRESHOLD", "30000")
@@ -340,6 +382,27 @@ class LINENotifier:
         top_items = sorted(all_alerts, key=lambda a: a.profit, reverse=True)[:10]
         total_profit = sum(a.profit for a in all_alerts)
 
+        summary_text = self._build_summary_text(all_alerts, top_items, total_profit, now)
+
+        # Messaging API で Flex メッセージを形成できる場合はそちらを優先
+        if self._messaging.is_configured:
+            result = self._messaging.send_text(summary_text)
+            if result.success:
+                return result
+            logger.warning("Messaging API サマリー送信失敗。LINE Notify にフォールバック")
+
+        if self._notify.is_configured:
+            return self._notify.send(summary_text)
+
+        return NotificationResult(success=False, method="none", error="全送信方式が失敗")
+
+    @staticmethod
+    def _build_summary_text(
+        all_alerts: list[TreasureAlert],
+        top_items: list[TreasureAlert],
+        total_profit: float,
+        now: str,
+    ) -> str:
         lines = [
             f"📊 BUYMA お宝サマリー — {now}",
             f"対象商品数: {len(all_alerts)} 件 / 合計利益: ¥{total_profit:,.0f}",
@@ -350,8 +413,7 @@ class LINENotifier:
                 f"{i}. {a.brand} {a.product_name[:20]}"
                 f"  利益: {a.profit_jpy_str}（{a.profit_rate_str}）"
             )
-
-        return self._notify.send("\n".join(lines))
+        return "\n".join(lines)
 
     def filter_treasures(self, records_with_profit: list[dict]) -> list[TreasureAlert]:
         """利益しきい値以上の商品をフィルタリングして TreasureAlert リストに変換する。
