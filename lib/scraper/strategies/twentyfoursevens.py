@@ -69,8 +69,8 @@ class TWENTYFOURSStrategy(ScraperStrategy):
                 "[class*='ProductPrice'], [data-testid='price'], [itemprop='price']",
                 timeout=10_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("twentyfoursevens: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -94,8 +94,8 @@ class TWENTYFOURSStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("twentyfoursevens: %s", exc)
         return None
 
     async def _extract_stock(self, page: Page) -> str:

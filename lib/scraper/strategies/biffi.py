@@ -62,8 +62,8 @@ class BIFFIStrategy(ScraperStrategy):
                 "[class*='price'], [itemprop='price']",
                 timeout=10_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("biffi: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -87,8 +87,8 @@ class BIFFIStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("biffi: %s", exc)
         return None
 
     async def _extract_stock(self, page: Page) -> str:

@@ -59,8 +59,8 @@ class SAKSStrategy(ScraperStrategy):
                 "[data-testid='product-price'], [class*='price-main'], [itemprop='price']",
                 timeout=30_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("saks: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -81,8 +81,8 @@ class SAKSStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("saks: %s", exc)
         return None
 
     async def _extract_stock(self, page: Page) -> str:

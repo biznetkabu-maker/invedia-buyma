@@ -103,8 +103,8 @@ class FARFETCHStrategy(ScraperStrategy):
                 "[class*='Price_price'], [itemprop='price'], #__NEXT_DATA__",
                 timeout=20_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("farfetch: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -143,8 +143,8 @@ class FARFETCHStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("farfetch: %s", exc)
 
         yen = await self._extract_yen_from_page(page)
         if yen:

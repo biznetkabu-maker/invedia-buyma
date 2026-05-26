@@ -645,5 +645,5 @@ def _save_session_cookies(cookies: list[dict]) -> None:
     import json
     try:
         _SESSION_COOKIE_FILE.write_text(json.dumps(cookies))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("buyma_automator: %s", exc)

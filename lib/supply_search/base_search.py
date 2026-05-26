@@ -77,8 +77,8 @@ def make_xhr_collector(
             if len(text) < min_length:
                 return
             blobs.append(text)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("base_search: %s", exc)
 
     return _on_response
 

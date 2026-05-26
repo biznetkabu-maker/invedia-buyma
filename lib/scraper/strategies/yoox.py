@@ -62,8 +62,8 @@ class YOOXStrategy(ScraperStrategy):
                 "[class*='d-price'], [class*='activatedPrice'], [itemprop='price']",
                 timeout=12_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("yoox: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -87,8 +87,8 @@ class YOOXStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("yoox: %s", exc)
         return None
 
     async def _extract_stock(self, page: Page) -> str:

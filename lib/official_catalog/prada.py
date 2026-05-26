@@ -375,8 +375,8 @@ async def _lookup_playwright(
                     text = await resp.text()
                     if mpn.upper() in text.upper():
                         json_blobs.append(text)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("prada: %s", exc)
 
             page.on("response", on_response)
 

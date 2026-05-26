@@ -63,8 +63,8 @@ class GIGLIOStrategy(ScraperStrategy):
                 "[class*='PriceBox'], [itemprop='price']",
                 timeout=10_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("giglio: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -89,8 +89,8 @@ class GIGLIOStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("giglio: %s", exc)
 
         # OGP meta fallback
         try:
@@ -101,8 +101,8 @@ class GIGLIOStrategy(ScraperStrategy):
             }""")
             if meta:
                 return meta
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("giglio: %s", exc)
         return None
 
     async def _extract_stock(self, page: Page) -> str:

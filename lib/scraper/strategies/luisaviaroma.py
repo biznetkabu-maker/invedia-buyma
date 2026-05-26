@@ -57,8 +57,8 @@ class LUISAVIAROMAStrategy(ScraperStrategy):
                 "[class*='ProductPrice'], [itemprop='price']",
                 timeout=30_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("luisaviaroma: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -82,8 +82,8 @@ class LUISAVIAROMAStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("luisaviaroma: %s", exc)
         return None
 
     async def _extract_stock(self, page: Page) -> str:

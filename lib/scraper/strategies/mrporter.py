@@ -69,8 +69,8 @@ class MRPORTERStrategy(ScraperStrategy):
                 "[data-testid='product-price'], [class*='ProductPrice'], [itemprop='price']",
                 timeout=10_000,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("mrporter: %s", exc)
 
         price = await self._text_or_none(page, *_PRICE_SELECTORS)
         if price:
@@ -94,8 +94,8 @@ class MRPORTERStrategy(ScraperStrategy):
             }""")
             if ld:
                 return ld
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("mrporter: %s", exc)
         return None
 
     async def _extract_stock(self, page: Page) -> str:
