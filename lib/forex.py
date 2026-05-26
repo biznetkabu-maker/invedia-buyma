@@ -23,13 +23,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.request import urlopen, Request
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +210,6 @@ def update_sheet_exchange_rates(
     Returns:
         更新に使用したレート辞書。
     """
-    from lib.sheet_manager import COLUMNS
 
     records = manager.get_all_records()
     if not records:

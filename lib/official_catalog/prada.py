@@ -12,7 +12,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
@@ -559,8 +559,6 @@ def lookup_prada_official_sync(
     mpn = (mpn or "").strip()
     if not mpn:
         return None
-
-    candidates: list[_Candidate] = []
 
     match, _diag = lookup_prada_official_diagnose(
         mpn, product_name=product_name, use_playwright=use_playwright,

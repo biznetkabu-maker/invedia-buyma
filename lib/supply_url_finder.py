@@ -167,8 +167,6 @@ async def _search_sites_for_query(
         domain_key = site.domain
         wait_until = "commit" if domain_key == "farfetch.com" else "domcontentloaded"
         wait_ms = page_wait_ms + (1500 if domain_key == "farfetch.com" else 0)
-        last_err: Optional[Exception] = None
-
         for attempt in range(2):
             try:
                 await page.goto(
@@ -222,10 +220,8 @@ async def _search_sites_for_query(
                     )
                 else:
                     log_lines.append(f"    -- {site.name}: 商品URLなし（検索0件の可能性）")
-                last_err = None
                 break
-            except Exception as e:
-                last_err = e
+            except Exception as e:  # noqa: F841
                 if attempt == 0:
                     log_lines.append(f"    .. {site.name}: 再試行（{type(e).__name__}）")
                     await asyncio.sleep(2)
@@ -251,6 +247,7 @@ async def discover_supply_urls_async(
     log_lines: Optional[list[str]] = None,
 ) -> list[SupplyUrlCandidate]:
     from playwright.async_api import async_playwright
+
     from lib.scraper.stealth import (
         LAUNCH_ARGS,
         apply_stealth_scripts,

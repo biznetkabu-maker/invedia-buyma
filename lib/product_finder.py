@@ -32,7 +32,6 @@ from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import quote_plus
 
-
 # ============================================================================
 # サイト定義（全15サイト）
 # ============================================================================

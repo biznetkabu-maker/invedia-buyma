@@ -12,12 +12,7 @@ from typing import TYPE_CHECKING, Optional
 from lib.funnel_policy import (
     POLICY_ID,
     POLICY_LABEL,
-    SKIP_BUYMA_FETCH,
-    SKIP_LOW_GRADE,
-    SKIP_NO_PRICE,
-    SKIP_NO_SELL_PRICE,
     SKIP_NO_STYLE,
-    SKIP_NO_SUPPLY,
     SKIP_OUT_OF_SCOPE,
     STATUS_AUTO_SKIP_PREFIX,
     STATUS_BUYMA_CANDIDATE,

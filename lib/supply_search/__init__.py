@@ -13,17 +13,17 @@ from .mytheresa import (
     parse_mytheresa_search_html,
     search_mytheresa_product_urls,
 )
-from .ssense import (
-    SsenseSearchDiagnostics,
-    lookup_ssense_search_diagnose,
-    parse_ssense_search_html,
-    search_ssense_product_urls,
-)
 from .netaporter import (
     NetaporterSearchDiagnostics,
     lookup_netaporter_search_diagnose,
     parse_netaporter_search_html,
     search_netaporter_product_urls,
+)
+from .ssense import (
+    SsenseSearchDiagnostics,
+    lookup_ssense_search_diagnose,
+    parse_ssense_search_html,
+    search_ssense_product_urls,
 )
 from .twentyfoursevens import (
     TwentyFourSSearchDiagnostics,

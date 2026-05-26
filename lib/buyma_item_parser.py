@@ -201,6 +201,7 @@ async def fetch_buyma_item_info(
         return None
 
     from playwright.async_api import async_playwright
+
     from lib.scraper.stealth import (
         LAUNCH_ARGS,
         apply_stealth_scripts,

@@ -413,6 +413,7 @@ async def _lookup_playwright(
     product_name: str = "",
 ) -> tuple[list[str], MytheresaSearchDiagnostics]:
     from playwright.async_api import async_playwright
+
     from lib.supply_search.base_search import launch_stealth_page, make_xhr_collector
 
     diag = MytheresaSearchDiagnostics(

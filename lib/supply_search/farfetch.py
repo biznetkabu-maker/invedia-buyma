@@ -26,8 +26,8 @@ from lib.supply_search_utils import (
     infer_supply_category_hints,
     infer_supply_department,
     is_footwear_product_name,
-    line_name_search_tokens,
     is_valid_farfetch_product_url,
+    line_name_search_tokens,
 )
 
 logger = logging.getLogger(__name__)
@@ -323,6 +323,7 @@ async def _lookup_playwright(
     product_name: str = "",
 ) -> tuple[list[str], FarfetchSearchDiagnostics]:
     from playwright.async_api import async_playwright
+
     from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
     diag = FarfetchSearchDiagnostics(

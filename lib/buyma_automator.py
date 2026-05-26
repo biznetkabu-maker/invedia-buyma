@@ -184,6 +184,7 @@ class BUYMAAutomator:
             )
 
         from playwright.async_api import async_playwright
+
         from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
         last_error: Optional[Exception] = None

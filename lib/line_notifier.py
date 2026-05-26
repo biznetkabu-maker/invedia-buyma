@@ -129,7 +129,7 @@ class LINENotifyClient:
             resp.raise_for_status()
             logger.info("LINE Notify 送信成功")
             return NotificationResult(success=True, method="LINE Notify")
-        except requests.HTTPError as e:
+        except requests.HTTPError:
             err = f"HTTP {resp.status_code}: {resp.text[:200]}"
             logger.error("LINE Notify 送信失敗: %s", err)
             return NotificationResult(success=False, method="LINE Notify", error=err)
@@ -223,7 +223,7 @@ class LINEMessagingClient:
             resp.raise_for_status()
             logger.info("LINE Messaging API 送信成功: %d 件", len(messages))
             return NotificationResult(success=True, method="LINE Messaging API")
-        except requests.HTTPError as e:
+        except requests.HTTPError:
             err = f"HTTP {resp.status_code}: {resp.text[:200]}"
             logger.error("LINE Messaging API 送信失敗: %s", err)
             return NotificationResult(success=False, method="LINE Messaging API", error=err)
@@ -447,8 +447,8 @@ class LINENotifier:
         for a in alerts[:5]:
             grade_tag = f"[{a.grade}] " if a.grade else ""
             lines += [
-                f"",
-                f"━━━━━━━━━━━━━━",
+                "",
+                "━━━━━━━━━━━━━━",
                 f"🏷️  {grade_tag}{a.brand}",
                 f"📦 {a.product_name}",
                 f"💴 利益: {a.profit_jpy_str}（{a.profit_rate_str}）",

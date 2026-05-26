@@ -9,11 +9,11 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright, Browser, BrowserContext
+from playwright.async_api import Browser, BrowserContext, async_playwright
 
 from .base import ScraperStrategy
 from .models import ScrapedResult
-from .proxy import ProxyConfig, ProxyRotator
+from .proxy import ProxyRotator
 from .stealth import (
     LAUNCH_ARGS,
     apply_stealth_scripts,
@@ -210,6 +210,7 @@ class PriceScraper:
     async def scrape_async(self, url: str) -> ScrapedResult:
         """1件のURLを非同期でスクレイピングする。"""
         import time as _time
+
         from lib.logging_config import record_scrape
 
         strategy = self.get_strategy(url)

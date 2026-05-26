@@ -131,6 +131,7 @@ async def fetch_buyma_style_id_from_url(
         return None
 
     from playwright.async_api import async_playwright
+
     from lib.scraper.stealth import (
         LAUNCH_ARGS,
         apply_stealth_scripts,

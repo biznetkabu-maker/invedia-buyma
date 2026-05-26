@@ -36,23 +36,25 @@ from __future__ import annotations
 
 import argparse
 import csv
+import logging
 import os
 import sys
 from pathlib import Path
-import logging
 from typing import Optional
 
 logging.basicConfig(level=logging.WARNING)
 
 from lib.buyma_demand import BUYMADemandScraper, BUYMADemandSignal
 from lib.forex import get_rate
-from lib.product_finder import build_search_urls, ALL_SITES
+from lib.product_finder import build_search_urls
 from lib.purchase_evaluator import (
-    EvaluationInput, PurchaseEvaluator, PurchaseScore,
-    _is_recommended_brand, _is_stable_category,
+    EvaluationInput,
+    PurchaseEvaluator,
+    PurchaseScore,
+    _is_recommended_brand,
+    _is_stable_category,
 )
 from lib.sheet_manager import ProductRecord, SheetManager
-
 
 # ============================================================================
 # 定数
@@ -200,7 +202,7 @@ def batch_intake(csv_path: str) -> None:
             f"{brand} {product_name[:28]:<28}  利益率 {rate_str}"
         )
 
-    print(f"\n  ヒント: A/B グレードの商品を python3 intake.py で1件ずつ登録してください。")
+    print("\n  ヒント: A/B グレードの商品を python3 intake.py で1件ずつ登録してください。")
 
 
 
@@ -287,7 +289,6 @@ def auto_intake_from_sheet(
 ) -> None:
     """在庫ステータス = BUYMA候補 かつ 仕入れURL が buyma.com の行を処理する。"""
     from lib.intake_funnel import (
-        AutoIntakeOutcome,
         filter_eligible_records,
         funnel_enabled,
         mark_auto_skip,
@@ -513,8 +514,8 @@ def _auto_search_supply_urls(
     use_funnel: bool,
 ) -> list[str]:
     """Step 3: 仕入先 URL の自動探索。"""
-    from lib.supply_url_finder import discover_supply_urls_funnel, discover_supply_urls_sync
     from lib.supply_search_utils import url_is_valid_supply_candidate as _url_valid_supply
+    from lib.supply_url_finder import discover_supply_urls_funnel, discover_supply_urls_sync
 
     _print_step(3, "仕入先 URL の自動探索")
 
@@ -586,7 +587,7 @@ def _auto_evaluate_and_write(
     skip_low_grades: bool,
 ) -> "AutoIntakeOutcome":
     """Steps 5-6: グレード判定・シート書き込み。"""
-    from lib.intake_funnel import AutoIntakeOutcome, SKIP_LOW_GRADE, SKIP_NO_PRICE
+    from lib.intake_funnel import SKIP_LOW_GRADE, SKIP_NO_PRICE, AutoIntakeOutcome
     from lib.product_identity import summarize_best_source_result
     from lib.supply_search_utils import style_id_for_matching
 
@@ -663,12 +664,12 @@ def _run_auto_intake(
 ) -> "AutoIntakeOutcome":
     """BUYMA URL を起点に仕入先探索〜シート反映までを非対話で実行する。"""
     from lib.intake_funnel import (
-        AutoIntakeOutcome,
         SKIP_BUYMA_FETCH,
         SKIP_NO_PRICE,
         SKIP_NO_SELL_PRICE,
         SKIP_NO_SUPPLY,
         SKIP_OUT_OF_SCOPE,
+        AutoIntakeOutcome,
         is_non_apparel_product_name,
     )
     from lib.product_identity import score_when_no_supply
@@ -835,7 +836,7 @@ def _get_exchange_rate_auto(currency: str = "EUR") -> float:
             return round(rate, 2)
     except Exception as e:
         print(f"  ⚠️  為替自動取得失敗: {e}")
-    print(f"  → デフォルト為替 155.0 を使用")
+    print("  → デフォルト為替 155.0 を使用")
     return 155.0
 
 
@@ -1063,7 +1064,7 @@ def _scrape_and_select(
     失敗時は空URLと価格0を返す。MatchScore は product_identity で付与。
     """
     from lib.multi_source import BestSourceFinder
-    from lib.product_identity import MatchScore, VariantKey, score_when_no_supply
+    from lib.product_identity import VariantKey, score_when_no_supply
     from lib.supply_search_utils import filter_scrape_candidate_urls
 
     if variant is None:
@@ -1181,7 +1182,6 @@ def _evaluate(
 
     BUYMA需要シグナルが取得できている場合はその値を使用する。
     """
-    from typing import Optional
 
     favorites = demand_signal.favorites_count if demand_signal else 0
     has_cart  = demand_signal.has_cart        if demand_signal else False
@@ -1254,7 +1254,7 @@ def _write_to_sheet(record: ProductRecord) -> None:
         config = Config.from_env()
         errors = config.validate()
         if errors:
-            print(f"  ⚠️  シート設定が未完了のため書き込みをスキップします。")
+            print("  ⚠️  シート設定が未完了のため書き込みをスキップします。")
             print(f"     商品情報: {record.商品名}")
             for e in errors:
                 print(f"       - {e}")
@@ -1272,7 +1272,7 @@ def _write_to_sheet(record: ProductRecord) -> None:
 
     except Exception as e:
         print(f"  ❌ シートへの書き込み失敗: {e}")
-        print(f"  商品情報（手動でシートに追加してください）:")
+        print("  商品情報（手動でシートに追加してください）:")
         for col, val in zip(["商品名", "ブランド", "型番", "仕入れURL", "現地価格",
                               "為替", "BUYMA販売価格", "在庫ステータス", "利益額"],
                              record.to_row()):

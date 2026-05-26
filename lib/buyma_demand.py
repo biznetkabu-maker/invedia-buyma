@@ -141,7 +141,9 @@ class BUYMADemandScraper:
     ) -> BUYMADemandSignal:
         """ブランド名・商品名で BUYMA を検索して需要シグナルを取得する（非同期版）。"""
         from urllib.parse import quote
+
         from playwright.async_api import async_playwright
+
         from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
         keyword = f"{brand} {product_name}"

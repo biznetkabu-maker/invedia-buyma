@@ -20,9 +20,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-import os
 import sys
-from dataclasses import asdict
 from typing import Optional
 
 from lib.config import Config
@@ -49,7 +47,7 @@ def _prompt(label: str, default=None, type_fn=str, choices: list | None = None):
                 continue
             return val
         except (ValueError, TypeError):
-            print(f"    ⚠️  入力形式が正しくありません。")
+            print("    ⚠️  入力形式が正しくありません。")
 
 
 def _prompt_bool(label: str, default: bool = False) -> bool:
@@ -184,7 +182,7 @@ def _record_to_input(record: ProductRecord, config: Config) -> Optional[Evaluati
 
 def sheet_mode(config: Config, csv_path: str = "") -> list[PurchaseScore]:
     """スプレッドシートから全商品を読み込んで一括評価する。"""
-    print(f"\n  スプレッドシートから商品を読み込み中...")
+    print("\n  スプレッドシートから商品を読み込み中...")
     manager = SheetManager(
         spreadsheet_id=config.spreadsheet_id,
         worksheet_name=config.worksheet_name,

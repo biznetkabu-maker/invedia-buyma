@@ -30,7 +30,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
 from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import quote_plus
@@ -194,6 +193,7 @@ class BUYMAResearcher:
             追加でページを開き、HTML から型番候補を style_id に格納する。
         """
         from playwright.async_api import async_playwright
+
         from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
         all_candidates: list[ResearchCandidate] = []
@@ -268,8 +268,9 @@ class BUYMAResearcher:
         candidates: list[ResearchCandidate],
     ) -> None:
         """buyma_url が商品詳細のとき、ページ HTML から style_id を抽出する。"""
-        from lib.buyma_style_id import extract_primary_style_id_from_buyma_html, is_buyma_item_url
         from playwright.async_api import async_playwright
+
+        from lib.buyma_style_id import extract_primary_style_id_from_buyma_html, is_buyma_item_url
         from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
         to_fetch = [

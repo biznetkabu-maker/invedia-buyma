@@ -19,16 +19,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from lib.line_notifier import LINENotifier, TreasureAlert
-from lib.sheet_manager import ProductRecord
 
 logger = logging.getLogger(__name__)
 

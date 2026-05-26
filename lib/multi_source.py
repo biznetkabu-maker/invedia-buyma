@@ -37,11 +37,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
-from lib.profit_calculator import calculate_profit, ProfitBreakdown
+from lib.profit_calculator import ProfitBreakdown, calculate_profit
 from lib.scraper import PriceScraper
 from lib.scraper.models import ScrapedResult
-from lib.style_id_utils import scraped_matches_buyma_style
 from lib.scraper.proxy import ProxyRotator
+from lib.style_id_utils import scraped_matches_buyma_style
 
 if TYPE_CHECKING:
     from lib.product_identity import MatchScore

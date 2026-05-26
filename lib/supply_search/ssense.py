@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import quote_plus, urljoin
 
@@ -391,6 +391,8 @@ async def search_ssense_product_urls(
 
 from lib.supply_search.base_search import (
     SearchDiagnostics as SsenseSearchDiagnostics,
+)
+from lib.supply_search.base_search import (
     launch_stealth_page,
     make_xhr_collector,
 )

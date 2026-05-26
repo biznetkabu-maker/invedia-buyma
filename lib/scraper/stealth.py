@@ -15,8 +15,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from playwright.async_api import BrowserContext, Page
-
+from playwright.async_api import Page
 
 # ── User-Agent プール（2026年最新ブラウザ — 定期的に更新すること） ─────────────
 _USER_AGENTS: list[str] = [
