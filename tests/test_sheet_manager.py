@@ -1,7 +1,7 @@
 """
 SheetManager のユニットテスト。
 
-gspread / oauth2client への実際のネットワーク接続は行わず、
+gspread / google-auth への実際のネットワーク接続は行わず、
 unittest.mock を使って全外部依存をスタブ化します。
 """
 

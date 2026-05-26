@@ -20,7 +20,7 @@ import gspread
 if TYPE_CHECKING:
     from lib.sheet_analysis import SheetAnalysisReport
 from gspread.exceptions import APIError, WorksheetNotFound, SpreadsheetNotFound
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +151,8 @@ class SheetManager:
                 raise FileNotFoundError(
                     f"認証情報ファイルが見つかりません: {self._credentials_path}"
                 )
-            creds = ServiceAccountCredentials.from_json_keyfile_name(
-                self._credentials_path, SCOPES
+            creds = Credentials.from_service_account_file(
+                self._credentials_path, scopes=SCOPES
             )
             self._client = gspread.authorize(creds)
         return self._client
