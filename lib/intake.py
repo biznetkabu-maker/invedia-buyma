@@ -252,7 +252,7 @@ def _check_auto_intake_features() -> None:
         print(f"      不足: {', '.join(missing)}")
         sys.exit(1)
     try:
-        import intake_funnel  # noqa: F401
+        import lib.intake_funnel  # noqa: F401
     except ImportError:
         missing.append("intake_funnel")
     print(
