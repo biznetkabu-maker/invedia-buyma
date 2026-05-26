@@ -328,11 +328,93 @@ async def _visit_pdps_for_sku(
             break
 
 
+async def _search_prada_pages(
+    page: Any, mpn: str, debug: dict[str, object],
+) -> tuple[list[_Candidate], list[str], str]:
+    """Prada 公式サイトの検索ページを巡回して候補を収集する。"""
+    collected: list[_Candidate] = []
+    json_blobs: list[str] = []
+    last_html = ""
+
+    async def on_response(resp: Any) -> None:
+        u = resp.url
+        if "prada.com" not in u:
+            return
+        if not any(h in u for h in _XHR_URL_HINTS):
+            return
+        try:
+            ct = resp.headers.get("content-type") or ""
+            if resp.status != 200 or "json" not in ct:
+                return
+            text = await resp.text()
+            if mpn.upper() in text.upper():
+                json_blobs.append(text)
+        except Exception as exc:
+            logger.debug("prada: %s", exc)
+
+    page.on("response", on_response)
+
+    for search_url in _search_urls(mpn):
+        try:
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+            await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(4000)
+            html = await page.content()
+            last_html = html
+            debug["final_url"] = page.url
+            if mpn.upper() in html.upper():
+                debug["mpn_in_search_html"] = True
+            pdp_in_html = _extract_prada_pdp_urls(html)
+            debug["prada_pdp_links_in_html"] = len(pdp_in_html)
+            collected.extend(_parse_html_product(html, mpn, page.url))
+            for u in pdp_in_html:
+                collected.append(_Candidate(url=u, sku=mpn, source="html_regex", score=42))
+            if debug["mpn_in_search_html"] or pdp_in_html:
+                break
+        except Exception as e:
+            logger.debug("prada search goto %s: %s", search_url[:60], e)
+
+    return collected, json_blobs, last_html
+
+
+async def _collect_dom_links(
+    page: Any, mpn: str,
+) -> list[_Candidate]:
+    """DOM 内の PDP リンクから候補を収集する。"""
+    collected: list[_Candidate] = []
+    try:
+        links = await page.locator('a[href*="/p/"]').evaluate_all(
+            "elements => elements.map(e => e.href)"
+        )
+    except Exception:
+        links = []
+    for link in (links or [])[:12]:
+        u = link.split("?")[0]
+        if "prada.com" not in u or "/p/" not in u:
+            continue
+        score = 48 if mpn.upper() in u.upper() else 35
+        collected.append(_Candidate(url=u, sku=mpn, source="dom_link", score=score))
+    return collected
+
+
+async def _collect_ddg_candidates(
+    page: Any, mpn: str, product_name: str, debug: dict[str, object],
+) -> list[_Candidate]:
+    """DuckDuckGo フォールバックで候補URLを収集する。"""
+    ddg_urllib = _ddg_prada_urls(mpn, product_name=product_name)
+    debug["ddg_urllib"] = len(ddg_urllib)
+    ddg_urls = list(ddg_urllib)
+    if not ddg_urls:
+        ddg_pw = await _ddg_urls_playwright(page, mpn, product_name=product_name)
+        debug["ddg_playwright"] = len(ddg_pw)
+        ddg_urls = ddg_pw
+    return [_Candidate(url=u, sku=mpn, source="ddg_fallback", score=40) for u in ddg_urls]
+
+
 async def _lookup_playwright(
     mpn: str, *, product_name: str = "",
 ) -> tuple[list[_Candidate], dict[str, object]]:
-    from playwright.async_api import async_playwright
-    from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
+    from lib.supply_search.base_search import launch_stealth_page
 
     mpn = (mpn or "").strip()
     debug: dict[str, object] = {
@@ -345,70 +427,14 @@ async def _lookup_playwright(
     if not mpn:
         return [], debug
 
-    collected: list[_Candidate] = []
-    json_blobs: list[str] = []
-
+    from playwright.async_api import async_playwright
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
+        browser, ctx, page = await launch_stealth_page(pw)
         try:
-            ctx_opts = stealth_context_options()
-            ctx_opts["locale"] = "ja-JP"
-            ctx_opts["timezone_id"] = "Asia/Tokyo"
-            ctx_opts["extra_http_headers"] = {
-                **ctx_opts.get("extra_http_headers", {}),
-                "Accept-Language": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
-            }
-            ctx = await browser.new_context(**ctx_opts)
-            page = await ctx.new_page()
-            await apply_stealth_scripts(page)
+            # 1. Prada 公式検索ページを巡回
+            collected, json_blobs, _ = await _search_prada_pages(page, mpn, debug)
 
-            async def on_response(resp) -> None:
-                u = resp.url
-                if "prada.com" not in u:
-                    return
-                if not any(h in u for h in _XHR_URL_HINTS):
-                    return
-                try:
-                    ct = resp.headers.get("content-type") or ""
-                    if resp.status != 200 or "json" not in ct:
-                        return
-                    text = await resp.text()
-                    if mpn.upper() in text.upper():
-                        json_blobs.append(text)
-                except Exception as exc:
-                    logger.debug("prada: %s", exc)
-
-            page.on("response", on_response)
-
-            last_html = ""
-            for search_url in _search_urls(mpn):
-                try:
-                    await page.goto(
-                        search_url, wait_until="domcontentloaded", timeout=60000,
-                    )
-                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                    await page.wait_for_timeout(4000)
-                    html = await page.content()
-                    last_html = html
-                    debug["final_url"] = page.url
-                    if mpn.upper() in html.upper():
-                        debug["mpn_in_search_html"] = True
-                    pdp_in_html = _extract_prada_pdp_urls(html)
-                    debug["prada_pdp_links_in_html"] = len(pdp_in_html)
-                    collected.extend(_parse_html_product(html, mpn, page.url))
-                    for u in pdp_in_html:
-                        collected.append(
-                            _Candidate(
-                                url=u, sku=mpn, source="html_regex", score=42,
-                            )
-                        )
-                    if debug["mpn_in_search_html"] or pdp_in_html:
-                        break
-                except Exception as e:
-                    logger.debug("prada search goto %s: %s", search_url[:60], e)
-
-            html = last_html
-
+            # 2. XHR JSON データを解析
             for blob in json_blobs:
                 try:
                     data = json.loads(blob)
@@ -416,37 +442,13 @@ async def _lookup_playwright(
                     continue
                 _walk_json(data, mpn, collected)
 
-            try:
-                links = await page.locator('a[href*="/p/"]').evaluate_all(
-                    "elements => elements.map(e => e.href)"
-                )
-            except Exception:
-                links = []
-            for link in (links or [])[:12]:
-                u = link.split("?")[0]
-                if "prada.com" not in u or "/p/" not in u:
-                    continue
-                score = 48 if mpn.upper() in u.upper() else 35
-                collected.append(
-                    _Candidate(url=u, sku=mpn, source="dom_link", score=score)
-                )
+            # 3. DOM 内 PDP リンク収集
+            collected.extend(await _collect_dom_links(page, mpn))
 
-            ddg_urllib = _ddg_prada_urls(mpn, product_name=product_name)
-            debug["ddg_urllib"] = len(ddg_urllib)
-            ddg_urls = list(ddg_urllib)
-            if not ddg_urls:
-                ddg_pw = await _ddg_urls_playwright(
-                    page, mpn, product_name=product_name,
-                )
-                debug["ddg_playwright"] = len(ddg_pw)
-                ddg_urls = ddg_pw
+            # 4. DuckDuckGo フォールバック
+            collected.extend(await _collect_ddg_candidates(page, mpn, product_name, debug))
 
-            for u in ddg_urls:
-                collected.append(
-                    _Candidate(url=u, sku=mpn, source="ddg_fallback", score=40)
-                )
-
-            # 検索・DDG で得た PDP を開き JSON-LD から完全 SKU を取得
+            # 5. PDP ページを訪問して JSON-LD から完全 SKU を取得
             pdp_to_visit: list[str] = []
             for c in collected:
                 if c.url and "/p/" in c.url:
