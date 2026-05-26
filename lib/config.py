@@ -53,6 +53,7 @@ GitHub Actions での運用では Secrets / Variables に以下を設定する:
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import tempfile
@@ -169,6 +170,8 @@ class Config:
             json.dump(json.loads(json_str), tmp)
             tmp.flush()
             tmp.close()
+            # 異常終了時にも一時ファイルを確実に削除
+            atexit.register(lambda p=tmp.name: os.unlink(p) if os.path.exists(p) else None)
             return tmp.name, tmp.name
 
         # ローカル開発用: ファイルパスを直接使用
