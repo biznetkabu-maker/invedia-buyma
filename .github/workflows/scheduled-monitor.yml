@@ -38,3 +38,16 @@ jobs:
           SCRAPER_HEADLESS: "true"
           SCRAPER_CONCURRENCY: "3"
         run: python -m lib.main
+
+      - name: Notify failure via LINE
+        if: failure()
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: |
+          if [ -n "$LINE_CHANNEL_ACCESS_TOKEN" ] && [ -n "$LINE_USER_ID" ]; then
+            curl -s -X POST https://api.line.me/v2/bot/message/push \
+              -H "Authorization: Bearer $LINE_CHANNEL_ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"to\":\"$LINE_USER_ID\",\"messages\":[{\"type\":\"text\",\"text\":\"⚠️ BUYMA 定期巡回が失敗しました\\n\\nワークフロー: ${{ github.workflow }}\\n実行: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\\n\\n確認してください。\"}]}"
+          fi
