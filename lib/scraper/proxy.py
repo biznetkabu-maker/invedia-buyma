@@ -33,6 +33,7 @@ import logging
 import os
 import random
 import re
+import time
 from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
@@ -128,20 +129,96 @@ class ProxyRotator:
         self,
         proxies: list[ProxyConfig] | None = None,
         strategy: str = "random",
+        *,
+        fallback_direct: bool = True,
+        cooldown_seconds: float = 300.0,
     ) -> None:
         self._proxies: list[ProxyConfig] = proxies or []
         self._strategy = strategy
         self._index = 0
+        self._fallback_direct = fallback_direct
+        self._cooldown_seconds = cooldown_seconds
+        self._fail_times: dict[str, float] = {}
+        self._fail_counts: dict[str, int] = {}
 
     def next(self) -> Optional[ProxyConfig]:
-        """次のプロキシを返す。プロキシ未設定の場合は None を返す。"""
+        """次のプロキシを返す。プロキシ未設定の場合は None を返す。
+
+        ヘルスチェック結果を考慮し、不健全なプロキシをスキップする。
+        全プロキシが不健全でフォールバックが有効な場合は None（直接接続）を返す。
+        """
         if not self._proxies:
             return None
+
+        healthy = [p for p in self._proxies if self._is_proxy_healthy(p)]
+        if not healthy:
+            if self._fallback_direct:
+                logger.warning("全プロキシが不健全 → 直接接続にフォールバック")
+                return None
+            healthy = self._proxies
+
         if self._strategy == "roundrobin":
-            proxy = self._proxies[self._index % len(self._proxies)]
+            proxy = healthy[self._index % len(healthy)]
             self._index += 1
             return proxy
-        return random.choice(self._proxies)
+        return random.choice(healthy)
+
+    def _is_proxy_healthy(self, proxy: ProxyConfig) -> bool:
+        """プロキシが現在健全（クールダウン期間外）かどうかを返す。"""
+        key = proxy.server
+        last_fail = self._fail_times.get(key, 0.0)
+        if last_fail == 0.0:
+            return True
+        return (time.monotonic() - last_fail) >= self._cooldown_seconds
+
+    def mark_failed(self, proxy: ProxyConfig) -> None:
+        """プロキシを不健全としてマークする。"""
+        self._fail_times[proxy.server] = time.monotonic()
+        self._fail_counts[proxy.server] = self._fail_counts.get(proxy.server, 0) + 1
+        logger.info(
+            "プロキシ不健全マーク: %r (通算 %d 回)", proxy, self._fail_counts[proxy.server]
+        )
+
+    def mark_healthy(self, proxy: ProxyConfig) -> None:
+        """プロキシを健全としてマークする（失敗状態をリセット）。"""
+        self._fail_times.pop(proxy.server, None)
+
+    def health_check(self, timeout: float = 5.0) -> dict[str, bool]:
+        """全プロキシに対して HTTP ヘルスチェックを実行する。
+
+        各プロキシを通じて httpbin.org/ip に GET リクエストを送り、
+        応答があれば健全、タイムアウトまたはエラーなら不健全とする。
+
+        Returns:
+            {proxy_server: is_healthy} の辞書。
+        """
+        import requests
+
+        results: dict[str, bool] = {}
+        for proxy in self._proxies:
+            try:
+                proxies_dict = {
+                    "http": f"http://{proxy.username}:{proxy.password}@{urlparse(proxy.server).hostname}:{urlparse(proxy.server).port}" if proxy.username else proxy.server,
+                    "https": f"http://{proxy.username}:{proxy.password}@{urlparse(proxy.server).hostname}:{urlparse(proxy.server).port}" if proxy.username else proxy.server,
+                }
+                resp = requests.get(
+                    "https://httpbin.org/ip",
+                    proxies=proxies_dict,
+                    timeout=timeout,
+                )
+                healthy = resp.status_code == 200
+            except Exception:
+                healthy = False
+
+            results[proxy.server] = healthy
+            if healthy:
+                self.mark_healthy(proxy)
+            else:
+                self.mark_failed(proxy)
+
+        alive = sum(1 for v in results.values() if v)
+        logger.info("ヘルスチェック完了: %d/%d 健全", alive, len(results))
+        return results
 
     def __bool__(self) -> bool:
         return len(self._proxies) > 0

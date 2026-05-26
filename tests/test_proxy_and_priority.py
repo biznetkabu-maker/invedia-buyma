@@ -134,6 +134,84 @@ class TestProxyRotator(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# ProxyRotator — ヘルスチェック & フォールバック
+# ---------------------------------------------------------------------------
+
+class TestProxyHealthCheck(unittest.TestCase):
+
+    def _make_proxies(self, n: int) -> list[ProxyConfig]:
+        return [
+            ProxyConfig(server=f"http://proxy{i}.example.com:8080", username=f"u{i}")
+            for i in range(n)
+        ]
+
+    def test_mark_failed_makes_proxy_unhealthy(self):
+        proxies = self._make_proxies(2)
+        r = ProxyRotator(proxies, strategy="roundrobin", cooldown_seconds=600)
+        r.mark_failed(proxies[0])
+        for _ in range(3):
+            p = r.next()
+            self.assertEqual(p.username, "u1")
+
+    def test_mark_healthy_restores_proxy(self):
+        proxies = self._make_proxies(2)
+        r = ProxyRotator(proxies, strategy="roundrobin", cooldown_seconds=600)
+        r.mark_failed(proxies[0])
+        r.mark_healthy(proxies[0])
+        users = {r.next().username for _ in range(4)}
+        self.assertIn("u0", users)
+
+    def test_fallback_direct_when_all_unhealthy(self):
+        proxies = self._make_proxies(2)
+        r = ProxyRotator(proxies, strategy="roundrobin", fallback_direct=True, cooldown_seconds=600)
+        r.mark_failed(proxies[0])
+        r.mark_failed(proxies[1])
+        self.assertIsNone(r.next())
+
+    def test_no_fallback_uses_unhealthy_proxies(self):
+        proxies = self._make_proxies(2)
+        r = ProxyRotator(proxies, strategy="roundrobin", fallback_direct=False, cooldown_seconds=600)
+        r.mark_failed(proxies[0])
+        r.mark_failed(proxies[1])
+        p = r.next()
+        self.assertIsNotNone(p)
+
+    def test_cooldown_expires(self):
+        import time
+        proxies = self._make_proxies(1)
+        r = ProxyRotator(proxies, strategy="roundrobin", fallback_direct=True, cooldown_seconds=0.1)
+        r.mark_failed(proxies[0])
+        self.assertIsNone(r.next())
+        time.sleep(0.15)
+        p = r.next()
+        self.assertIsNotNone(p)
+        self.assertEqual(p.username, "u0")
+
+    def test_health_check_with_mock(self):
+        proxies = self._make_proxies(2)
+        r = ProxyRotator(proxies)
+
+        mock_resp = unittest.mock.MagicMock()
+        mock_resp.status_code = 200
+
+        with patch("requests.get", return_value=mock_resp) as mock_get:
+            results = r.health_check(timeout=1.0)
+
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(results.values()))
+
+    def test_health_check_marks_failed_on_error(self):
+        proxies = self._make_proxies(1)
+        r = ProxyRotator(proxies, fallback_direct=True, cooldown_seconds=600)
+
+        with patch("requests.get", side_effect=ConnectionError("proxy down")):
+            results = r.health_check(timeout=1.0)
+
+        self.assertFalse(results[proxies[0].server])
+        self.assertIsNone(r.next())
+
+
+# ---------------------------------------------------------------------------
 # ProxyRotator.from_env
 # ---------------------------------------------------------------------------
 
