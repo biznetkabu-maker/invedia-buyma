@@ -433,21 +433,11 @@ async def search_24s_product_urls(
     return urls, debug
 
 
-@dataclass
-class TwentyFourSSearchDiagnostics:
-    query: str
-    style_id: str
-    playwright_ok: bool
-    playwright_error: str = ""
-    search_url: str = ""
-    access_denied: bool = False
-    no_results: bool = False
-    json_ld_items: int = 0
-    html_link_items: int = 0
-    xhr_blobs: int = 0
-    candidate_count: int = 0
-    top_candidates: list[dict[str, Any]] = field(default_factory=list)
-    product_urls: list[str] = field(default_factory=list)
+from lib.supply_search.base_search import (
+    SearchDiagnostics as TwentyFourSSearchDiagnostics,
+    launch_stealth_page,
+    make_xhr_collector,
+)
 
 
 async def _lookup_playwright(
@@ -458,7 +448,6 @@ async def _lookup_playwright(
     product_name: str = "",
 ) -> tuple[list[str], TwentyFourSSearchDiagnostics]:
     from playwright.async_api import async_playwright
-    from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
     diag = TwentyFourSSearchDiagnostics(
         query=query,
@@ -470,36 +459,9 @@ async def _lookup_playwright(
 
     try:
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
+            browser, _ctx, page = await launch_stealth_page(pw)
             try:
-                ctx_opts = stealth_context_options()
-                ctx_opts["locale"] = "en-US"
-                ctx = await browser.new_context(**ctx_opts)
-                page = await ctx.new_page()
-                await apply_stealth_scripts(page)
-
-                async def on_response(resp) -> None:
-                    u = resp.url
-                    if "24s.com" not in u.lower():
-                        return
-                    if not any(h in u.lower() for h in _XHR_URL_HINTS):
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                    try:
-                        if resp.status != 200:
-                            return
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                        text = await resp.text()
-                        if len(text) < 80:
-                            return
-                        xhr_blobs.append(text)
-                    except Exception:
-                        pass
-
-                page.on("response", on_response)
+                page.on("response", make_xhr_collector("24s.com", _XHR_URL_HINTS, xhr_blobs))
                 urls, dbg = await search_24s_product_urls(
                     page,
                     query,

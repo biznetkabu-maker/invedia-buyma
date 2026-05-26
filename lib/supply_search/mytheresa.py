@@ -413,7 +413,7 @@ async def _lookup_playwright(
     product_name: str = "",
 ) -> tuple[list[str], MytheresaSearchDiagnostics]:
     from playwright.async_api import async_playwright
-    from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
+    from lib.supply_search.base_search import launch_stealth_page, make_xhr_collector
 
     diag = MytheresaSearchDiagnostics(
         query=query,
@@ -425,36 +425,9 @@ async def _lookup_playwright(
 
     try:
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
+            browser, _ctx, page = await launch_stealth_page(pw)
             try:
-                ctx_opts = stealth_context_options()
-                ctx_opts["locale"] = "en-US"
-                ctx = await browser.new_context(**ctx_opts)
-                page = await ctx.new_page()
-                await apply_stealth_scripts(page)
-
-                async def on_response(resp) -> None:
-                    u = resp.url
-                    if "mytheresa" not in u.lower():
-                        return
-                    if not any(h in u.lower() for h in _XHR_URL_HINTS):
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                    try:
-                        if resp.status != 200:
-                            return
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct and "graphql" not in u.lower():
-                            return
-                        text = await resp.text()
-                        if len(text) < 80:
-                            return
-                        xhr_blobs.append(text)
-                    except Exception:
-                        pass
-
-                page.on("response", on_response)
+                page.on("response", make_xhr_collector("mytheresa", _XHR_URL_HINTS, xhr_blobs))
                 urls, dbg = await search_mytheresa_product_urls(
                     page,
                     query,
