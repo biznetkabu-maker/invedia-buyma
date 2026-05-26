@@ -1,0 +1,40 @@
+name: scheduled-price-monitor
+
+on:
+  schedule:
+    # 6時間ごとに実行（UTC: 0:00, 6:00, 12:00, 18:00）
+    - cron: "0 */6 * * *"
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e ".[browser]"
+
+      - name: Install Playwright browsers
+        run: python -m playwright install chromium --with-deps
+
+      - name: Run price monitor
+        env:
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          WORKSHEET_NAME: ${{ secrets.WORKSHEET_NAME }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          LINE_PROFIT_THRESHOLD: ${{ secrets.LINE_PROFIT_THRESHOLD }}
+          PROXY_LIST: ${{ secrets.PROXY_LIST }}
+          AUTO_FOREX: "true"
+          FOREX_UPDATE_SHEET: "true"
+          OPERATION_MODE: "all"
+          PRIORITY_TIER: "all"
+          SCRAPER_HEADLESS: "true"
+          SCRAPER_CONCURRENCY: "3"
+        run: python -m lib.main
