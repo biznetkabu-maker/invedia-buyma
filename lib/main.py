@@ -22,6 +22,7 @@ import os
 import sys
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from lib.config import Config
@@ -210,24 +211,18 @@ def process_product(
 
 # ── サマリー出力 ─────────────────────────────────────────────────────────────
 
-_UNKNOWN_HISTORY_FILE = "scraper_unknown_history.json"
+_UNKNOWN_HISTORY_FILE = Path("scraper_unknown_history.json")
 
 
 def _load_unknown_history() -> dict[str, int]:
     """商品名→連続 unknown 回数のキャッシュを読む。"""
-    import json
-    try:
-        return json.loads(open(_UNKNOWN_HISTORY_FILE).read())
-    except Exception:
-        return {}
+    from lib.file_lock import atomic_json_read
+    return atomic_json_read(_UNKNOWN_HISTORY_FILE, default={})
 
 
 def _save_unknown_history(history: dict[str, int]) -> None:
-    import json
-    try:
-        open(_UNKNOWN_HISTORY_FILE, "w").write(json.dumps(history, ensure_ascii=False))
-    except Exception:
-        pass
+    from lib.file_lock import atomic_json_write
+    atomic_json_write(_UNKNOWN_HISTORY_FILE, history)
 
 
 def _check_scraper_health(results: list[ProductResult], config: Config) -> None:

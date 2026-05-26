@@ -68,20 +68,13 @@ def cache_key(brand: str, mpn: str) -> str:
 
 
 def _load() -> dict:
-    try:
-        return json.loads(_cache_file().read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    from lib.file_lock import atomic_json_read
+    return atomic_json_read(_cache_file(), default={})
 
 
 def _save(data: dict) -> None:
-    try:
-        _cache_file().write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except Exception as e:
-        logger.debug("仕入URLキャッシュ保存失敗: %s", e)
+    from lib.file_lock import atomic_json_write
+    atomic_json_write(_cache_file(), data)
 
 
 def _domain(url: str) -> str:

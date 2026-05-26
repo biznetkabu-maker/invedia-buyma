@@ -180,19 +180,13 @@ def _fetch_from_fallback(base: str) -> Optional[dict[str, float]]:
 
 
 def _load_cache() -> dict:
-    try:
-        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    from lib.file_lock import atomic_json_read
+    return atomic_json_read(_CACHE_FILE, default={})
 
 
 def _save_cache(cache: dict) -> None:
-    try:
-        _CACHE_FILE.write_text(
-            json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except Exception as e:
-        logger.debug("為替キャッシュ保存失敗: %s", e)
+    from lib.file_lock import atomic_json_write
+    atomic_json_write(_CACHE_FILE, cache)
 
 
 def _is_cache_valid(cache: dict, key: str) -> bool:

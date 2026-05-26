@@ -279,14 +279,10 @@ def _cache_key(alert: TreasureAlert) -> str:
 
 
 def _load_notified_cache() -> dict:
-    try:
-        return json.loads(_NOTIFIED_CACHE_FILE.read_text())
-    except Exception:
-        return {}
+    from lib.file_lock import atomic_json_read
+    return atomic_json_read(_NOTIFIED_CACHE_FILE, default={})
 
 
 def _save_notified_cache(cache: dict) -> None:
-    try:
-        _NOTIFIED_CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
-    except Exception as e:
-        logger.warning("通知キャッシュの保存失敗: %s", e)
+    from lib.file_lock import atomic_json_write
+    atomic_json_write(_NOTIFIED_CACHE_FILE, cache)
