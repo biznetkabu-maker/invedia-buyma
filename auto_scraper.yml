@@ -1,0 +1,159 @@
+name: 自動価格・在庫巡回
+
+on:
+  # ─── スケジュール実行 ────────────────────────────────────────────────────
+  schedule:
+    # 高利益率商品 (≥20%) のみ — 毎時実行 (UTC)
+    - cron: "0 * * * *"
+
+  # ─── 手動実行（GitHub UI の "Run workflow" ボタン）────────────────────
+  workflow_dispatch:
+    inputs:
+      priority_tier:
+        description: |
+          実行する優先度ティア:
+            high   = 利益率20%以上の商品のみ
+            medium = 利益率10%以上の商品
+            all    = 全商品
+        required: false
+        default: "all"
+      dry_run:
+        description: "dry_run=true のときシートへの書き戻しをスキップ（動作確認用）"
+        required: false
+        default: "false"
+
+concurrency:
+  group: scraper-${{ github.event.inputs.priority_tier || 'scheduled' }}
+  cancel-in-progress: true
+
+jobs:
+  # ══════════════════════════════════════════════════════════════════════════
+  # Job 1: 高優先度 (毎時) — スケジュール実行 / 手動 high
+  # ══════════════════════════════════════════════════════════════════════════
+  scrape-high-priority:
+    name: "高優先度巡回 (利益率≥20%)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # スケジュール実行 または 手動で priority_tier=high/medium/all を指定した場合
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.12 セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: 依存パッケージをインストール
+        run: pip install -r requirements.txt
+
+      - name: Playwright Chromium をインストール
+        run: playwright install chromium --with-deps
+
+      - name: 巡回実行
+        env:
+          # ── 必須 Secrets ──────────────────────────────────────────────
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          SPREADSHEET_ID:          ${{ secrets.SPREADSHEET_ID }}
+
+          # ── 優先度ティア ──────────────────────────────────────────────
+          # スケジュール実行時は自動判定 (auto)、手動実行時は入力値を使用
+          PRIORITY_TIER: ${{ github.event.inputs.priority_tier || 'auto' }}
+          HIGH_PROFIT_THRESHOLD:   ${{ vars.HIGH_PROFIT_THRESHOLD   || '0.20' }}
+          MEDIUM_PROFIT_THRESHOLD: ${{ vars.MEDIUM_PROFIT_THRESHOLD || '0.10' }}
+
+          # ── シート設定 ────────────────────────────────────────────────
+          WORKSHEET_NAME:     ${{ vars.WORKSHEET_NAME    || '02_Purchase_Control' }}
+          BUYMA_FEE_RATE:     ${{ vars.BUYMA_FEE_RATE    || '0.077' }}
+          AUTO_FOREX:         ${{ vars.AUTO_FOREX         || 'true' }}
+          FOREX_UPDATE_SHEET: ${{ vars.FOREX_UPDATE_SHEET || 'false' }}
+          CUSTOMS_RATE:       ${{ vars.CUSTOMS_RATE      || '0.10' }}
+          SHIPPING_COST_JPY:  ${{ vars.SHIPPING_COST_JPY || '2000' }}
+          TARGET_PROFIT_RATE: ${{ vars.TARGET_PROFIT_RATE || '0.10' }}
+
+          # ── スクレイパー設定 ──────────────────────────────────────────
+          SCRAPER_CONCURRENCY: ${{ vars.SCRAPER_CONCURRENCY || '3' }}
+          SCRAPER_HEADLESS:    "true"
+          SCRAPER_TIMEOUT_MS:  ${{ vars.SCRAPER_TIMEOUT_MS || '30000' }}
+
+          # ── LINE 通知設定 (任意) ──────────────────────────────────────
+          LINE_NOTIFY_TOKEN:         ${{ secrets.LINE_NOTIFY_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID:              ${{ secrets.LINE_USER_ID }}
+          LINE_PROFIT_THRESHOLD:     ${{ vars.LINE_PROFIT_THRESHOLD || '30000' }}
+
+          # ── 画像処理 / BUYMA 自動出品 (任意) ────────────────────────
+          ENABLE_IMAGE_PROCESSING: ${{ vars.ENABLE_IMAGE_PROCESSING || 'false' }}
+          BG_REMOVAL_BACKEND:      ${{ vars.BG_REMOVAL_BACKEND || 'rembg' }}
+          NANO_BANANA2_API_KEY:    ${{ secrets.NANO_BANANA2_API_KEY }}
+          REMOVE_BG_API_KEY:       ${{ secrets.REMOVE_BG_API_KEY }}
+          BUYMA_EMAIL:             ${{ secrets.BUYMA_EMAIL }}
+          BUYMA_PASSWORD:          ${{ secrets.BUYMA_PASSWORD }}
+          AUTO_LIST_GRADE:         ${{ vars.AUTO_LIST_GRADE || '' }}
+
+          # ── プロキシ設定 (任意) ───────────────────────────────────────
+          # Bright Data
+          BRIGHTDATA_CUSTOMER: ${{ secrets.BRIGHTDATA_CUSTOMER }}
+          BRIGHTDATA_ZONE:     ${{ vars.BRIGHTDATA_ZONE    || 'residential' }}
+          BRIGHTDATA_PASSWORD: ${{ secrets.BRIGHTDATA_PASSWORD }}
+          BRIGHTDATA_COUNTRY:  ${{ vars.BRIGHTDATA_COUNTRY || '' }}
+          # Smartproxy
+          SMARTPROXY_USER:     ${{ secrets.SMARTPROXY_USER }}
+          SMARTPROXY_PASSWORD: ${{ secrets.SMARTPROXY_PASSWORD }}
+          SMARTPROXY_HOST:     ${{ vars.SMARTPROXY_HOST || 'gate.smartproxy.com' }}
+          SMARTPROXY_PORT:     ${{ vars.SMARTPROXY_PORT || '7000' }}
+          # カスタム複数プロキシ
+          PROXY_LIST:          ${{ secrets.PROXY_LIST }}
+          PROXY_ROTATION:      ${{ vars.PROXY_ROTATION || 'random' }}
+
+        run: python main.py
+
+      - name: ジョブサマリーを記録
+        if: always()
+        run: |
+          echo "## 巡回完了 \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`" >> $GITHUB_STEP_SUMMARY
+          echo "| 項目 | 値 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| 優先度ティア | \`${PRIORITY_TIER}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| トリガー | \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Job 2: 接続テスト（手動のみ）
+  # ══════════════════════════════════════════════════════════════════════════
+  connection-test:
+    name: "全サイト接続テスト"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.12 セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: 依存パッケージをインストール
+        run: pip install -r requirements.txt
+
+      - name: Playwright Chromium をインストール
+        run: playwright install chromium --with-deps
+
+      - name: 全サイト接続テスト
+        env:
+          BRIGHTDATA_CUSTOMER: ${{ secrets.BRIGHTDATA_CUSTOMER }}
+          BRIGHTDATA_PASSWORD: ${{ secrets.BRIGHTDATA_PASSWORD }}
+          SMARTPROXY_USER:     ${{ secrets.SMARTPROXY_USER }}
+          SMARTPROXY_PASSWORD: ${{ secrets.SMARTPROXY_PASSWORD }}
+          PROXY_LIST:          ${{ secrets.PROXY_LIST }}
+        run: python test_all_strategies.py --concurrency 3
+
+      - name: テスト結果をサマリーに記録
+        if: always()
+        run: echo "接続テスト完了。上記ログを確認してください。" >> $GITHUB_STEP_SUMMARY

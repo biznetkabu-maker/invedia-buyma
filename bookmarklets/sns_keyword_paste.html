@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SNS文面 → キーワード / BUYMAリンク（貼り付け用）</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 12px; color: #111; }
+    h1 { font-size: 1.2rem; }
+    textarea { width: 100%; min-height: 160px; font-size: 14px; padding: 8px; box-sizing: border-box; }
+    pre { background: #f4f4f5; padding: 12px; overflow: auto; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+    button { margin: 8px 8px 8px 0; padding: 8px 14px; cursor: pointer; }
+    .muted { color: #555; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>SNSキャプションなどを貼って需要トレース用の材料にする</h1>
+  <p class="muted">
+    Instagram / TikTok / X などは <strong>サイト上のブックマークレットが CSP で動かないことが多い</strong>です。
+    キャプションやメモを<strong>手でコピー</strong>して、下の欄に貼り付けてください。
+    BUYMA の検索・<code>intake.py</code> Step1 のキーワード案、またはブックマークレット結果と突き合わせる用途向けです。
+  </p>
+
+  <textarea id="src" placeholder="#celinebag や 商品名、BUYMAリンク https://www.buyma.com/item/123456/ などをそのまま貼る"></textarea>
+  <div>
+    <button type="button" id="run">抽出</button>
+    <button type="button" id="copy">結果をコピー</button>
+  </div>
+
+  <h2>抽出結果</h2>
+  <pre id="out">（「抽出」を押す）</pre>
+
+  <script>
+    function extract(text) {
+      const buyma = [...text.matchAll(/https?:\/\/(?:www\.)?buyma\.com\/item\/(\d{5,})\/?/gi)].map(function (m) {
+        return 'https://www.buyma.com/item/' + m[1] + '/';
+      });
+      const uniqBuyma = [...new Set(buyma)];
+
+      const tags = [...text.matchAll(/[#＃]([^\s#．.]+)/g)].map(function (m) {
+        return m[1];
+      });
+      const uniqTags = [...new Set(tags)];
+
+      const urls = [...text.matchAll(/https?:\/\/[^\s<>"')]+/gi)].map(function (m) {
+        return m[0].replace(/[,.)]+$/, '');
+      }).filter(function (u) {
+        return u.indexOf('buyma.com/item/') < 0;
+      });
+      const uniqUrls = [...new Set(urls)];
+
+      var lines = [];
+      lines.push('--- BUYMA 商品URL ---');
+      lines.push.apply(lines, uniqBuyma.length ? uniqBuyma : ['(なし)']);
+      lines.push('');
+      lines.push('--- ハッシュタグ ---');
+      lines.push.apply(lines, uniqTags.length ? uniqTags : ['(なし)']);
+      lines.push('');
+      lines.push('--- その他リンク（参考） ---');
+      lines.push.apply(lines, uniqUrls.length ? uniqUrls : ['(なし)']);
+
+      lines.push('');
+      lines.push('--- intake 検索語のひな型（手で整えること） ---');
+      if (uniqTags.length >= 2) {
+        lines.push(uniqTags.slice(0, 3).join(' ') + ' （タグのみ→ブランド公式名に置換推奨）');
+      } else {
+        lines.push('（短文にブランド名＋モデル俗称を自分で書く）');
+      }
+      return lines.join('\n');
+    }
+
+    document.getElementById('run').addEventListener('click', function () {
+      var t = document.getElementById('src').value || '';
+      document.getElementById('out').textContent = extract(t);
+    });
+
+    document.getElementById('copy').addEventListener('click', function () {
+      var o = document.getElementById('out').textContent;
+      navigator.clipboard.writeText(o).then(function () {
+        alert('コピーしました');
+      }).catch(function () {
+        alert('コピーに失敗しました。結果を手で選択してください。');
+      });
+    });
+  </script>
+</body>
+</html>

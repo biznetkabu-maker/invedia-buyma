@@ -1,0 +1,1 @@
+javascript:alert('BUYMAブックマーク OK\n次に本番URLを登録してください');

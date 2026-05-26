@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invedia-buyma"
+version = "1.0.0"
+description = "BUYMA 無在庫バイヤー自動化パイプライン"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "gspread>=6.0,<7",
+    "google-auth>=2.0,<3",
+    "oauth2client>=4.1,<5",
+    "requests>=2.31,<3",
+    "beautifulsoup4>=4.12,<5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0,<9"]
+browser = ["playwright>=1.40,<2", "Pillow>=10.0,<12"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lib*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

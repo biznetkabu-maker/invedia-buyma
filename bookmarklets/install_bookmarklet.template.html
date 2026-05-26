@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BUYMA 候補抽出 — インストール</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; line-height: 1.5; }
+    .btn { display: inline-block; margin: 8px 8px 8px 0; padding: 12px 18px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
+    .btn.secondary { background: #64748b; }
+    .warn-box { background: #fff7ed; border: 2px solid #f97316; padding: 12px; border-radius: 8px; margin: 12px 0; }
+    .ok-box { background: #ecfdf5; border: 2px solid #10b981; padding: 12px; border-radius: 8px; margin: 12px 0; }
+    textarea { width: 100%; height: 72px; font-size: 11px; }
+    #status { font-weight: 600; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>BUYMA 候補抽出 v3-panel-import</h1>
+
+  <p class="warn-box">
+    <strong>ブックマークで何も出ない</strong> → 下の <strong>「本番 URL（gzip）」</strong> で貼り替え。<br />
+    それでもダメなら <strong>F12 コンソール版</strong>（<code>BUYMA候補_F12実行.bat</code>）が確実です。
+  </p>
+
+  <p class="ok-box">
+    成功: 自動スクロール → 白パネル <code>v3-panel-import</code> →「シートに取込」（要: 取込サーバー起動）
+  </p>
+
+  <button type="button" class="btn" id="copyGzip">本番 URL をコピー（gzip・推奨）</button>
+  <button type="button" class="btn secondary" id="copyTest">テスト URL（alert だけ）</button>
+  <button type="button" class="btn secondary" id="showGzip">URL を表示</button>
+  <p id="status"></p>
+  <textarea id="raw" hidden readonly></textarea>
+
+  <p><a id="dragLink" href="#">ここをブックマークバーへドラッグ（gzip 版）</a></p>
+
+  <script id="gzip-code" type="text/plain">%%BOOKMARKLET_GZIP%%</script>
+  <script id="loader-code" type="text/plain">%%BOOKMARKLET_LOADER%%</script>
+  <script id="full-code" type="text/plain">%%BOOKMARKLET_FULL%%</script>
+  <script id="test-code" type="text/plain">javascript:alert('BUYMAブックマーク OK');</script>
+  <script>
+    (function () {
+      function norm(t) {
+        t = t.trim();
+        return t.indexOf("javascript:") === 0 ? t : "javascript:" + t;
+      }
+      var gzip = norm(document.getElementById("gzip-code").textContent);
+      var test = norm(document.getElementById("test-code").textContent);
+      var ta = document.getElementById("raw");
+      document.getElementById("dragLink").href = gzip;
+      function status(msg, ok) {
+        var s = document.getElementById("status");
+        s.textContent = msg;
+        s.style.color = ok ? "#15803d" : "#b91c1c";
+      }
+      function copy(text, msg) {
+        navigator.clipboard.writeText(text).then(function () {
+          status(msg + " (" + text.length + " 文字)", true);
+        }).catch(function () {
+          ta.value = text;
+          ta.hidden = false;
+          ta.select();
+          status("手動で Ctrl+C", false);
+        });
+      }
+      document.getElementById("copyGzip").onclick = function () {
+        copy(gzip, "gzip URL をコピーしました");
+      };
+      document.getElementById("copyTest").onclick = function () {
+        copy(test, "テスト URL をコピーしました");
+      };
+      document.getElementById("showGzip").onclick = function () {
+        ta.value = gzip;
+        ta.hidden = false;
+        ta.select();
+        status("gzip " + gzip.length + " 文字", true);
+      };
+    })();
+  </script>
+</body>
+</html>

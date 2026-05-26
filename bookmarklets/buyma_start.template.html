@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>BUYMA 候補</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 32px auto; padding: 0 16px; line-height: 1.6; }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; }
+    .ok { background: #ecfdf5; border: 2px solid #22c55e; padding: 16px; border-radius: 10px; font-size: 1.05rem; }
+    ol { font-size: 1.05rem; padding-left: 1.2em; }
+    ol li { margin: 8px 0; }
+    .sub { margin-top: 20px; font-size: 0.9rem; color: #555; }
+    .btn { margin-top: 12px; padding: 10px 16px; background: #64748b; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>BUYMA 候補（2ステップ）</h1>
+  <p class="ok" id="msg">スクリプトをコピーしています…</p>
+  <ol>
+    <li><strong>今</strong>：BUYMA の一覧を開く → <strong>F12</strong> → <strong>Console</strong> → <strong>Ctrl+V</strong> → <strong>Enter</strong></li>
+    <li>白い画面で <strong>TSV をコピー</strong> → フォルダの <strong>2_候補_取込.bat</strong></li>
+  </ol>
+  <p class="sub">毎日は <strong>1_候補_抽出.bat</strong> と <strong>2_候補_取込.bat</strong> だけ。ブックマーク登録は不要です。</p>
+  <button type="button" class="btn" id="bmBtn">上級：ブックマーク用URLをコピー</button>
+  <script id="scriptBody" type="text/plain">%%SCRIPT_BODY%%</script>
+  <script id="gzipBm" type="text/plain">%%GZIP_BOOKMARKLET%%</script>
+  <script>
+    (function () {
+      var code = document.getElementById("scriptBody").textContent.trim();
+      var msg = document.getElementById("msg");
+      function copied(n) {
+        msg.textContent = "コピーしました。BUYMA 一覧で F12 → Console → 貼り付け → Enter → TSVコピー → 2_候補_取込.bat";
+      }
+      function fail() {
+        msg.textContent = "自動コピーできませんでした。F12用ボタンを下のグレーボタンで再試行するか、開発者に連絡してください。";
+      }
+      navigator.clipboard.writeText(code).then(function () {
+        copied(code.length);
+      }).catch(function () {
+        fail();
+      });
+      document.getElementById("bmBtn").onclick = function () {
+        var g = document.getElementById("gzipBm").textContent.trim();
+        navigator.clipboard.writeText(g).then(function () {
+          alert("ブックマークURLをコピーしました。\nCtrl+Shift+O → BUYMA → URLを全部消して貼り付け");
+        });
+      };
+    })();
+  </script>
+</body>
+</html>

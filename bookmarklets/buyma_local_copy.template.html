@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>BUYMA 候補抽出 - ローカルコピー</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 16px auto; padding: 0 12px; }
+    .btn { padding: 12px 20px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+    textarea { width: 100%; height: 220px; font-size: 11px; font-family: ui-monospace, monospace; margin: 12px 0; }
+    .box { background: #ecfdf5; border: 2px solid #10b981; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <h1>BUYMA 候補抽出 v3-price（オフライン用）</h1>
+  <p class="box">
+    GitHub は非公開のため Web からは読めません（404）。<br />
+    <strong>「全文をコピー」</strong> → BUYMA 一覧で <strong>F12 → Console → Ctrl+V → Enter</strong>
+  </p>
+  <button type="button" class="btn" id="copyBtn">全文をコピー</button>
+  <span id="status"></span>
+  <textarea id="code" readonly></textarea>
+  <p>先頭が <code>(function () {</code> であることを確認してから貼り付けてください。</p>
+  <script id="embedded" type="text/plain">%%SCRIPT_BODY%%</script>
+  <script>
+    (function () {
+      var code = document.getElementById("embedded").textContent.trim();
+      document.getElementById("code").value = code;
+      document.getElementById("copyBtn").onclick = function () {
+        var ta = document.getElementById("code");
+        ta.focus();
+        ta.select();
+        navigator.clipboard.writeText(code).then(function () {
+          document.getElementById("status").textContent = " OK " + code.length + " 文字";
+        }).catch(function () {
+          document.execCommand("copy");
+          document.getElementById("status").textContent = " OK manual";
+        });
+      };
+    })();
+  </script>
+</body>
+</html>

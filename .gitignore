@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 秘密情報
+.env
+invedia_ebay.txt
+config/credentials.json
+config/ebay_tokens.json
+config/browser_auth/
+
+# 出力・ログ・キャッシュ
+output_csv/
+logs/
+data/deepl_cache.json
+.supply_url_cache.json
+processed_images/
+
+# BUYMA 秘密情報
+credentials.json
+worksheet_name.txt
+
+# Windows ショートカット（リポジトリ外の bat へのリンク等）
+*.lnk

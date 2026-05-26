@@ -1,0 +1,2 @@
+REM GitHub raw URL returns 404 for private repo. Use buyma_local_copy.html instead.
+REM Run: BUYMA候補_F12実行.bat
