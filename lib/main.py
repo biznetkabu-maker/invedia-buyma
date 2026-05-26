@@ -564,6 +564,12 @@ async def run(config: Config) -> list[ProductResult]:
     # 7. お宝商品の通知
     _send_notifications(results)
 
+    # 8. スクレイプメトリクスのサマリー出力
+    from lib.logging_config import get_metrics
+    metrics = get_metrics()
+    if metrics.sites:
+        metrics.log_summary()
+
     return results
 
 

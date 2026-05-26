@@ -209,9 +209,14 @@ class PriceScraper:
 
     async def scrape_async(self, url: str) -> ScrapedResult:
         """1件のURLを非同期でスクレイピングする。"""
+        import time as _time
+        from lib.logging_config import record_scrape
+
         strategy = self.get_strategy(url)
         last_error: Optional[Exception] = None
         launch_args = LAUNCH_ARGS if self._use_stealth else []
+        site = urlparse(url).netloc.lower()
+        t0 = _time.monotonic()
 
         async with async_playwright() as pw:
             browser: Browser = await pw.chromium.launch(
@@ -223,6 +228,7 @@ class PriceScraper:
                     try:
                         result = await self._scrape_with_browser(url, browser, strategy)
                         if result.success:
+                            record_scrape(site, success=True, response_time=_time.monotonic() - t0)
                             return result
                         last_error = Exception(result.error or "unknown error")
                     except Exception as e:
@@ -238,6 +244,7 @@ class PriceScraper:
             finally:
                 await browser.close()
 
+        record_scrape(site, success=False, response_time=_time.monotonic() - t0)
         return self._make_error_result(url, last_error)
 
     async def _scrape_with_browser(
