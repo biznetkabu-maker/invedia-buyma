@@ -461,6 +461,159 @@ class BestSourceFinder:
             reason += f" / 型番「{buyma_sid}」一致"
         return best, reason
 
+# ============================================================================
+# P3: 価格マルチソース投票
+# ============================================================================
+
+@dataclass
+class PriceVote:
+    """1つの仕入先が報告した価格票。"""
+
+    url: str
+    price: float
+    currency: str
+    source_site: str  # e.g. "ssense", "farfetch"
+
+    @property
+    def domain(self) -> str:
+        from urllib.parse import urlparse
+        return urlparse(self.url).hostname or self.source_site
+
+
+@dataclass
+class PriceConsensus:
+    """P3 投票の集計結果。"""
+
+    consensus_price: float
+    currency: str
+    votes: list[PriceVote]
+    outliers: list[PriceVote]
+    confidence: float  # 0.0 ~ 1.0
+    method: str  # "median", "single", "unanimous"
+
+    @property
+    def vote_count(self) -> int:
+        return len(self.votes)
+
+    @property
+    def outlier_count(self) -> int:
+        return len(self.outliers)
+
+    def summary(self) -> str:
+        return (
+            f"P3: {self.currency} {self.consensus_price:,.2f} "
+            f"(信頼度 {self.confidence:.0%}, {self.vote_count}票, "
+            f"外れ値{self.outlier_count}件, 方式: {self.method})"
+        )
+
+
+def compute_price_consensus(
+    candidates: list[SourceCandidate],
+    *,
+    outlier_threshold: float = 0.15,
+) -> Optional[PriceConsensus]:
+    """複数の SourceCandidate から価格コンセンサスを計算する。
+
+    同一通貨で価格取得済み・在庫ありの候補から投票を集め、
+    中央値を基準として外れ値（±threshold 以上の乖離）を除外し、
+    合意価格と信頼度を返す。
+
+    Args:
+        candidates: SourceCandidate のリスト
+        outlier_threshold: 外れ値の閾値（中央値からの乖離率、デフォルト 15%）
+
+    Returns:
+        PriceConsensus or None（有効な投票が 0 件の場合）
+    """
+    import statistics
+
+    votes: list[PriceVote] = []
+    for c in candidates:
+        if c.price is not None and c.currency and c.stock_status == "in_stock":
+            site = _extract_site_name(c.url)
+            votes.append(PriceVote(
+                url=c.url,
+                price=c.price,
+                currency=c.currency,
+                source_site=site,
+            ))
+
+    if not votes:
+        return None
+
+    # 通貨別にグループ化し、最多通貨を採用
+    currency_groups: dict[str, list[PriceVote]] = {}
+    for v in votes:
+        currency_groups.setdefault(v.currency, []).append(v)
+    primary_currency = max(currency_groups, key=lambda k: len(currency_groups[k]))
+    primary_votes = currency_groups[primary_currency]
+
+    if len(primary_votes) == 1:
+        return PriceConsensus(
+            consensus_price=primary_votes[0].price,
+            currency=primary_currency,
+            votes=primary_votes,
+            outliers=[],
+            confidence=0.5,
+            method="single",
+        )
+
+    prices = [v.price for v in primary_votes]
+    median_price = statistics.median(prices)
+
+    inliers: list[PriceVote] = []
+    outliers: list[PriceVote] = []
+    for v in primary_votes:
+        deviation = abs(v.price - median_price) / median_price if median_price else 0
+        if deviation <= outlier_threshold:
+            inliers.append(v)
+        else:
+            outliers.append(v)
+
+    if not inliers:
+        inliers = primary_votes
+        outliers = []
+
+    consensus_price = statistics.median([v.price for v in inliers])
+
+    if not outliers and len(set(round(v.price, 2) for v in inliers)) == 1:
+        method = "unanimous"
+        confidence = 1.0
+    else:
+        method = "median"
+        inlier_prices = [v.price for v in inliers]
+        if len(inlier_prices) >= 2:
+            spread = max(inlier_prices) - min(inlier_prices)
+            relative_spread = spread / consensus_price if consensus_price else 0
+            confidence = max(0.5, min(1.0, 1.0 - relative_spread))
+        else:
+            confidence = 0.6
+        if outliers:
+            confidence *= max(0.7, 1.0 - 0.1 * len(outliers))
+
+    return PriceConsensus(
+        consensus_price=consensus_price,
+        currency=primary_currency,
+        votes=inliers,
+        outliers=outliers,
+        confidence=round(confidence, 3),
+        method=method,
+    )
+
+
+def _extract_site_name(url: str) -> str:
+    """URL からサイト名を抽出する。"""
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    for name in ("ssense", "farfetch", "mytheresa", "net-a-porter", "24s",
+                 "harrods", "selfridges", "saks", "neiman", "mr porter",
+                 "yoox", "theoutnet", "biffi", "tessabit", "giglio",
+                 "luisaviaroma", "matches", "harvey"):
+        if name.replace("-", "") in host.replace("-", ""):
+            return name
+    return host
+
+
 def style_id_consistent_with_buyma(
     scrape: ScrapedResult,
     buyma_style_id: Optional[str],
