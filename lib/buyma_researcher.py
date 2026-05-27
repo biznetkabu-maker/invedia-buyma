@@ -385,7 +385,7 @@ class BUYMAResearcher:
                     ))
 
         except Exception:
-            pass
+            logger.debug("BUYMA検索結果パース失敗", exc_info=True)
 
         return candidates
 

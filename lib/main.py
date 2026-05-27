@@ -162,7 +162,7 @@ def _check_style_id_mismatches(results: list[ProductResult]) -> None:
         if notifier.is_configured:
             notifier._notify_raw(alert_text)
     except Exception:
-        pass
+        logger.debug("LINE通知送信失敗", exc_info=True)
 
 def process_product(
     record: ProductRecord,
@@ -264,7 +264,7 @@ def _check_scraper_health(results: list[ProductResult], config: Config) -> None:
             if notifier.is_configured:
                 notifier._notify_raw(alert_text)
         except Exception:
-            pass
+            logger.debug("LINE通知送信失敗", exc_info=True)
 
 
 def print_summary(results: list[ProductResult], config: Config) -> None:
