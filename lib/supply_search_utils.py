@@ -1,5 +1,8 @@
 """
 仕入先検索用のクエリ整形（BUYMA タイトルのノイズ除去・型番候補の抽出）。
+
+ブランド関連ユーティリティは ``brand_utils`` モジュールに分離。
+後方互換のためこのモジュールから re-export する。
 """
 
 from __future__ import annotations
@@ -8,17 +11,25 @@ import re
 from typing import Optional
 from urllib.parse import urlparse
 
+from lib.brand_utils import (  # noqa: F401  -- re-export
+    _brand_from_bracket_tags,
+    _canonical_brand_from_japanese,
+    brand_slug,
+    is_marketplace_brand_noise,
+    normalize_brand_name,
+    resolve_merchandise_brand,
+    url_matches_brand,
+)
+
 _BRACKET_TAG = re.compile(r"【[^】]*】|\[[^\]]*\]")
 _DECORATIVE_CHARS = re.compile(r"[♪★☆♥♡♫♬♩♭♯]+")
 _MODEL_CODE = re.compile(r"\b([A-Z0-9][A-Z0-9-]{3,})\b", re.I)
 _NUMERIC_ONLY = re.compile(r"^\d{7,}$")
-# 容量・寸法のみ（型番ではない）
 _VOLUME_OR_SIZE = re.compile(
     r"^\d+\s*(?:ml|mL|l|oz|g|kg|mm|cm)$|^\d+ml$|^\d+l$",
     re.I,
 )
 
-# BUYMA タイトルでよく見る日本語表記 → 英語ブランド（site: 検索・公式照合用）
 _BRAND_JA_ALIASES: dict[str, str] = {
     "プラダ": "PRADA",
     "グッチ": "GUCCI",
@@ -548,134 +559,6 @@ def best_demand_search_phrase(
         return queries[0]
     cleaned = clean_product_name_for_search(product_name, brand)
     return f"{brand} {cleaned}".strip() if cleaned else brand
-
-
-def _canonical_brand_from_japanese(text: str) -> Optional[str]:
-    """プラダ☆キルティング 等から PRADA を抽出。"""
-    s = (text or "").strip()
-    if not s:
-        return None
-    for segment in re.split(r"[☆★◆・\s]+", s):
-        seg = segment.strip()
-        if not seg:
-            continue
-        for alias, canon in _BRAND_JA_ALIASES.items():
-            if seg == alias or seg.startswith(alias):
-                return canon
-    for alias, canon in sorted(_BRAND_JA_ALIASES.items(), key=lambda x: -len(x[0])):
-        if alias in s:
-            return canon
-    return None
-
-
-def _brand_from_bracket_tags(text: str) -> str:
-    """【PRADA】等のブランドタグ（セール系タグは除外）。"""
-    for m in _BRACKET_TAG.finditer(text or ""):
-        inner = m.group(0).strip("【】[] ").strip()
-        if not inner or re.search(
-            r"セール|sale|vip|限定|数量|国内|送料|即発|新品",
-            inner,
-            re.I,
-        ):
-            continue
-        if re.match(r"^[A-Za-z]{2,20}$", inner):
-            return inner.upper()
-        ja = _canonical_brand_from_japanese(inner)
-        if ja:
-            return ja
-    return ""
-
-
-_MARKETPLACE_BRAND_NOISE = frozenset({"buyma", "バイマ"})
-
-
-def is_marketplace_brand_noise(brand: str) -> bool:
-    """BUYMA ページ JSON-LD / シート列のプラットフォーム名。"""
-    s = (brand or "").strip().casefold()
-    return s in _MARKETPLACE_BRAND_NOISE
-
-
-def resolve_merchandise_brand(*sources: Optional[str]) -> str:
-    """複数ソースから最初の有効な商品ブランドを選ぶ（BUYMA 等は除外）。"""
-    for source in sources:
-        s = (source or "").strip()
-        if not s:
-            continue
-        tag = _brand_from_bracket_tags(s)
-        if tag:
-            b = normalize_brand_name(tag)
-            if b and not is_marketplace_brand_noise(b):
-                return b
-        first = s.split(None, 1)[0]
-        if first:
-            b = normalize_brand_name(first)
-            if b and not is_marketplace_brand_noise(b):
-                if re.match(r"^[A-Za-z]{2,20}$", b) or _canonical_brand_from_japanese(first):
-                    return b
-        if " " not in s:
-            b = normalize_brand_name(s)
-            if b and not is_marketplace_brand_noise(b):
-                return b
-    return ""
-
-
-def normalize_brand_name(brand: str) -> str:
-    """【VIPセール】PRADA / ♪直営アウトレット♪PRADA / プラダ☆キルティング 等を正規化。"""
-    tag_brand = _brand_from_bracket_tags(brand or "")
-    if tag_brand and not is_plausible_model_code(tag_brand):
-        return tag_brand
-
-    s = _BRACKET_TAG.sub(" ", brand or "").strip()
-    s = _DECORATIVE_CHARS.sub(" ", s)
-    s = re.sub(r"[◆・☆★]+", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    if not s:
-        return ""
-
-    ja_brand = _canonical_brand_from_japanese(brand or s)
-    if ja_brand:
-        return ja_brand
-
-    # セラー装飾語の後ろの PRADA 等（♪直営アウトレット♪PRADA）
-    upper_tokens = re.findall(r"\b([A-Z]{2,20})\b", s)
-    if upper_tokens:
-        return upper_tokens[-1]
-
-    # PRADA◆Re-Nylon のように連結されている場合
-    head = re.match(r"^([A-Za-z]{2,20})", s.replace(" ", ""))
-    if head:
-        word = head.group(1)
-        if word.isupper() or len(word) <= 6:
-            return word.upper() if word.isupper() else word
-
-    for token in s.split():
-        for part in re.split(r"[◆\-]", token):
-            t = part.strip(" -|/：:・◆")
-            if not t:
-                continue
-            if re.match(r"^[A-Za-z]{2,20}$", t):
-                return t.upper() if t.isupper() else t
-    result = s.split()[0] if s.split() else s
-    if is_plausible_model_code(result):
-        if tag_brand:
-            return tag_brand
-        ja = _canonical_brand_from_japanese(brand or s)
-        if ja:
-            return ja
-    return result
-
-
-def brand_slug(brand: str) -> str:
-    b = normalize_brand_name(brand).lower()
-    return re.sub(r"[^a-z0-9]+", "-", b).strip("-")
-
-
-def url_matches_brand(brand: str, url: str) -> bool:
-    """仕入先 URL にブランド名が含まれるか（誤ヒット除外）。"""
-    slug = brand_slug(brand)
-    if not slug or len(slug) < 3:
-        return True
-    return slug in url.lower()
 
 
 def sheet_style_id_value(product_name: str, style_id: Optional[str] = None) -> str:
