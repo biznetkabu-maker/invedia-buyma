@@ -398,4 +398,5 @@ if __name__ == "__main__":
     app = create_app()
     port = int(os.getenv("PORT", 5000))
     print(f"🚀 Webhook サーバー起動: http://localhost:{port}/webhook")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    host = os.getenv("WEBHOOK_HOST", "127.0.0.1")
+    app.run(host=host, port=port, debug=False)
