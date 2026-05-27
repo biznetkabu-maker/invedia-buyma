@@ -56,6 +56,17 @@ from lib.purchase_evaluator import (
 )
 from lib.sheet_manager import ProductRecord, SheetManager
 
+from lib.intake_cli import (
+    ask as _ask,
+    ask_float as _ask_float,
+    ask_int as _ask_int,
+    ask_yn as _ask_yn,
+    print_header as _print_header,
+    print_score as _print_score,
+    print_step as _print_step,
+    require as _require,
+)
+
 # ============================================================================
 # 定数
 # ============================================================================
@@ -1307,90 +1318,7 @@ def _write_to_sheet_quiet(record: ProductRecord) -> bool:
         return False
 
 
-# ============================================================================
-# 表示ユーティリティ
-# ============================================================================
-
-def _print_header() -> None:
-    print("\n" + "=" * 60)
-    print("  BUYMA 商品取り込みツール")
-    print("=" * 60)
-    print("  【手動】基本情報入力・URLの確認・最終判断")
-    print("  【自動】為替・需要・型番照合・スクレイプ・シート追加")
-    print()
-
-
-def _print_step(n: int | float, label: str) -> None:
-    print(f"\n── Step {n}: {label} {'─' * max(0, 44 - len(label) - len(str(n)))}")
-
-
-def _print_score(score: "PurchaseScore") -> None:
-    icon = _GRADE_ICONS.get(score.grade, "❓")
-    print(f"\n  {icon} グレード: {score.grade}  スコア: {score.overall_score:.1f}")
-    print(f"     実質利益率: {score.effective_profit_rate:.1%}", end="")
-    if score.profit_breakdown:
-        print(f"  利益額: ¥{score.profit_breakdown.profit:,.0f}")
-    else:
-        print()
-    if score.critical_issues:
-        print("  ⚠️  致命的問題:")
-        for issue in score.critical_issues:
-            print(f"       - {issue}")
-    if score.improvements:
-        print("  💡 改善提案（上位3件）:")
-        for tip in score.improvements[:3]:
-            print(f"       - {tip}")
-
-
-# ============================================================================
-# 入力ユーティリティ
-# ============================================================================
-
-def _require(label: str, hint: str = "") -> str:
-    """必須入力。空欄のままにできない。"""
-    hint_str = f"（{hint}）" if hint else ""
-    while True:
-        val = input(f"  {label}{hint_str}: ").strip()
-        if val:
-            return val
-        print("    ⚠️  必須項目です。")
-
-
-def _ask(label: str, default: str = "", hint: str = "") -> str:
-    """任意入力。Enter でデフォルト値を使用。"""
-    hint_str = f"（{hint}）" if hint else ""
-    raw = input(f"  {label}{hint_str} [{default}]: ").strip()
-    return raw if raw else default
-
-
-def _ask_float(label: str, default: float = 0.0) -> float:
-    while True:
-        raw = input(f"  {label} [{default}]: ").strip()
-        if not raw:
-            return default
-        try:
-            return float(raw.replace(",", ""))
-        except ValueError:
-            print("    ⚠️  数値を入力してください（例: 210000）。")
-
-
-def _ask_int(label: str, default: int = 0) -> int:
-    while True:
-        raw = input(f"  {label} [{default}]: ").strip()
-        if not raw:
-            return default
-        try:
-            return int(raw)
-        except ValueError:
-            print("    ⚠️  整数を入力してください。")
-
-
-def _ask_yn(label: str, default: bool = True) -> bool:
-    hint = "Y/n" if default else "y/N"
-    raw = input(f"  {label} [{hint}]: ").strip().lower()
-    if not raw:
-        return default
-    return raw in ("y", "yes", "はい", "1")
+# UI helpers are imported from lib.intake_cli at the top of the file.
 
 
 
