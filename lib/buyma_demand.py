@@ -132,7 +132,8 @@ class BUYMADemandScraper:
         timeout_ms: int = 20_000,
     ) -> BUYMADemandSignal:
         """ブランド名・商品名で BUYMA を検索して需要シグナルを取得する（同期版）。"""
-        return run_sync(self.get_demand_async(brand, product_name, timeout_ms))
+        result: BUYMADemandSignal = run_sync(self.get_demand_async(brand, product_name, timeout_ms))
+        return result
 
     async def get_demand_async(
         self,

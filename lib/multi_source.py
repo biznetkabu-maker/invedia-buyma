@@ -185,7 +185,7 @@ class BestSourceFinder:
         fx_buffer_rate: float = 0.03,
     ) -> BestSourceResult:
         """候補URLリストを並列スクレイプし、最優良仕入先を返す（同期版）。"""
-        return run_sync(
+        result: BestSourceResult = run_sync(
             self.find_best_async(
                 candidate_urls=candidate_urls,
                 buyma_price=buyma_price,
@@ -197,6 +197,7 @@ class BestSourceFinder:
                 fx_buffer_rate=fx_buffer_rate,
             )
         )
+        return result
 
     async def find_best_async(
         self,
@@ -605,5 +606,6 @@ def style_id_consistent_with_buyma(
     """
     if not buyma_style_id or not buyma_style_id.strip():
         return True
-    return scraped_matches_buyma_style(scrape.style_id, buyma_style_id.strip())
+    matched: bool = scraped_matches_buyma_style(scrape.style_id, buyma_style_id.strip())
+    return matched
 

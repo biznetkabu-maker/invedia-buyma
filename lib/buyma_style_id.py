@@ -166,7 +166,7 @@ def fetch_buyma_style_id_from_url_sync(
     timeout_ms: int = 25_000,
 ) -> Optional[str]:
     """同期ラッパー。"""
-    return run_sync(
+    result: Optional[str] = run_sync(
         fetch_buyma_style_id_from_url(
             url,
             headless=headless,
@@ -174,3 +174,4 @@ def fetch_buyma_style_id_from_url_sync(
             timeout_ms=timeout_ms,
         )
     )
+    return result

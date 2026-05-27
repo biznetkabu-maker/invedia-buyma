@@ -30,7 +30,7 @@ import asyncio
 import logging
 import os
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -95,7 +95,7 @@ class ListingData:
     buyma_price: float
     size: str = ""
     color: str = ""
-    image_paths: list[str] = None
+    image_paths: list[str] = field(default_factory=list)
     category: str = ""
     condition: str = "新品"
     shipping_from: str = "海外"
@@ -117,7 +117,7 @@ class ListingResult:
     url: Optional[str] = None
     item_id: Optional[str] = None
     error: Optional[str] = None
-    listed_at: datetime = None
+    listed_at: Optional[datetime] = None
 
     def __post_init__(self):
         if self.listed_at is None:
@@ -244,7 +244,8 @@ class BUYMAAutomator:
 
     def post_listing(self, listing: ListingData) -> ListingResult:
         """出品（同期版）。"""
-        return run_sync(self.post_listing_async(listing))
+        result: ListingResult = run_sync(self.post_listing_async(listing))
+        return result
 
     async def post_batch_async(
         self, listings: list[ListingData], interval_sec: float = 5.0
@@ -265,7 +266,8 @@ class BUYMAAutomator:
         self, listings: list[ListingData], interval_sec: float = 5.0
     ) -> list[ListingResult]:
         """出品バッチ処理（同期版）。"""
-        return run_sync(self.post_batch_async(listings, interval_sec))
+        results: list[ListingResult] = run_sync(self.post_batch_async(listings, interval_sec))
+        return results
 
     # ------------------------------------------------------------------
     # 内部処理
@@ -636,10 +638,11 @@ def _random_type_delay() -> int:
     return random.randint(80, 200)
 
 
-def _load_session_cookies() -> list[dict]:
+def _load_session_cookies() -> list[dict[str, object]]:
     import json
     try:
-        return json.loads(_SESSION_COOKIE_FILE.read_text())
+        data: list[dict[str, object]] = json.loads(_SESSION_COOKIE_FILE.read_text())
+        return data
     except Exception:
         return []
 

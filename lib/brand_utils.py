@@ -92,7 +92,7 @@ def normalize_brand_name(brand: str) -> str:
     if ja_brand:
         return ja_brand
 
-    upper_tokens = re.findall(r"\b([A-Z]{2,20})\b", s)
+    upper_tokens: list[str] = re.findall(r"\b([A-Z]{2,20})\b", s)
     if upper_tokens:
         return upper_tokens[-1]
 

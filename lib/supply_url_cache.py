@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from lib.style_id_utils import normalize_style_id
@@ -66,9 +66,10 @@ def cache_key(brand: str, mpn: str) -> str:
     return f"{b}|{m}"
 
 
-def _load() -> dict:
+def _load() -> dict[str, Any]:
     from lib.file_lock import atomic_json_read
-    return atomic_json_read(_cache_file(), default={})
+    data: dict[str, Any] = atomic_json_read(_cache_file(), default={})
+    return data
 
 
 def _save(data: dict) -> None:

@@ -24,6 +24,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from lib.line_notifier import LINENotifier, TreasureAlert
 
@@ -236,7 +237,7 @@ class NotificationManager:
             return 0
 
         grade_order = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
-        threshold_order = grade_order.get(self._auto_list_grade, 1)
+        threshold_order: int = grade_order.get(self._auto_list_grade or "B", 1)
 
         target_alerts = [
             a for a in alerts
@@ -275,9 +276,10 @@ def _cache_key(alert: TreasureAlert) -> str:
     return f"{alert.brand}::{alert.product_name}::{alert.source_url}"
 
 
-def _load_notified_cache() -> dict:
+def _load_notified_cache() -> dict[str, Any]:
     from lib.file_lock import atomic_json_read
-    return atomic_json_read(_NOTIFIED_CACHE_FILE, default={})
+    data: dict[str, Any] = atomic_json_read(_NOTIFIED_CACHE_FILE, default={})
+    return data
 
 
 def _save_notified_cache(cache: dict) -> None:
