@@ -35,6 +35,40 @@ from lib.profit_calculator import ProfitBreakdown, calculate_profit
 logger = logging.getLogger(__name__)
 
 # ============================================================================
+# スコアリング重み・しきい値定数
+# ============================================================================
+
+# 4大基準の重み
+WEIGHT_LOGISTICS = 0.30
+WEIGHT_DEMAND = 0.25
+WEIGHT_ECONOMICS = 0.30
+WEIGHT_RISK = 0.15
+
+# 物流サブスコアの重み
+W_DISPATCH = 0.35
+W_ARRIVAL = 0.35
+W_STOCK = 0.20
+W_PACKAGING = 0.10
+
+# 需要サブスコアの重み
+W_BRAND_POWER = 0.35
+W_SCARCITY = 0.35
+W_RESPONSE = 0.30
+
+# 経済性サブスコアの重み
+W_PROFIT_RATE = 0.55
+W_PRICE_DIFF = 0.30
+W_FX_BUFFER = 0.15
+
+# リスクサブスコアの重み
+W_AUTHENTICITY = 0.50
+W_MODEL_AGE = 0.35
+W_VOLUME_ZONE = 0.15
+
+# E判定しきい値
+MAX_OVERALL_ON_DISQUALIFY = 39.0
+
+# ============================================================================
 # データモデル
 # ============================================================================
 
@@ -304,7 +338,7 @@ class PurchaseEvaluator:
             inp, logistics, demand, economics, risk
         )
         if critical_issues:
-            overall = min(overall, 39.0)
+            overall = min(overall, MAX_OVERALL_ON_DISQUALIFY)
 
         overall = round(overall, 2)
 
@@ -383,14 +417,14 @@ class PurchaseEvaluator:
         ]
 
         # 発送スピードを重視した重み付き平均
-        agg = (disp_score * 0.35 + arr_score * 0.35 + stock_score * 0.20 + pkg_score * 0.10)
+        agg = (disp_score * W_DISPATCH + arr_score * W_ARRIVAL + stock_score * W_STOCK + pkg_score * W_PACKAGING)
 
         return CriterionResult(
             name="発送・物流基準",
-            weight=0.30,
+            weight=WEIGHT_LOGISTICS,
             sub_scores=sub_scores,
             aggregate_score=round(agg, 2),
-            weighted_score=round(agg * 0.30, 2),
+            weighted_score=round(agg * WEIGHT_LOGISTICS, 2),
             passed=not disqualified and agg >= 55,
             disqualified=disqualified,
             disqualify_reason=disqualify_reason,
@@ -464,14 +498,14 @@ class PurchaseEvaluator:
             SubScore("希少性",      scar_score,  100, scar_reason,   scar_score  >= 70),
             SubScore("反応値",      resp_score,  100, resp_reason,   resp_score  >= 50),
         ]
-        agg = brand_score * 0.35 + scar_score * 0.35 + resp_score * 0.30
+        agg = brand_score * W_BRAND_POWER + scar_score * W_SCARCITY + resp_score * W_RESPONSE
 
         return CriterionResult(
             name="市場需要基準",
-            weight=0.25,
+            weight=WEIGHT_DEMAND,
             sub_scores=sub_scores,
             aggregate_score=round(agg, 2),
-            weighted_score=round(agg * 0.25, 2),
+            weighted_score=round(agg * WEIGHT_DEMAND, 2),
             passed=agg >= 55,
         )
 
@@ -551,7 +585,7 @@ class PurchaseEvaluator:
             SubScore("内外価格差",            diff_score,   100, diff_reason,    diff_score  >= 50),
             SubScore("為替リスクバッファ",     fx_score,     100, fx_reason,      fx_score    >= 75),
         ]
-        agg = profit_score * 0.55 + diff_score * 0.30 + fx_score * 0.15
+        agg = profit_score * W_PROFIT_RATE + diff_score * W_PRICE_DIFF + fx_score * W_FX_BUFFER
 
         # 赤字は即時 Disqualify
         disqualified = pr < 0
@@ -559,10 +593,10 @@ class PurchaseEvaluator:
 
         return CriterionResult(
             name="経済性基準",
-            weight=0.30,
+            weight=WEIGHT_ECONOMICS,
             sub_scores=sub_scores,
             aggregate_score=round(agg, 2),
-            weighted_score=round(agg * 0.30, 2),
+            weighted_score=round(agg * WEIGHT_ECONOMICS, 2),
             passed=not disqualified and agg >= 55,
             disqualified=disqualified,
             disqualify_reason=disqualify_reason,
@@ -609,7 +643,7 @@ class PurchaseEvaluator:
             SubScore("モデル年齢",  age_score,  100, age_reason,  age_score  >= 65),
             SubScore("サイズ/色",   vol_score,  100, vol_reason,  vol_score  >= 70),
         ]
-        agg = auth_score * 0.50 + age_score * 0.35 + vol_score * 0.15
+        agg = auth_score * W_AUTHENTICITY + age_score * W_MODEL_AGE + vol_score * W_VOLUME_ZONE
 
         disqualified = auth_disqualified or age_disqualified
         disqualify_reason = ""
@@ -620,10 +654,10 @@ class PurchaseEvaluator:
 
         return CriterionResult(
             name="リスク管理基準",
-            weight=0.15,
+            weight=WEIGHT_RISK,
             sub_scores=sub_scores,
             aggregate_score=round(agg, 2),
-            weighted_score=round(agg * 0.15, 2),
+            weighted_score=round(agg * WEIGHT_RISK, 2),
             passed=not disqualified and agg >= 55,
             disqualified=disqualified,
             disqualify_reason=disqualify_reason,
