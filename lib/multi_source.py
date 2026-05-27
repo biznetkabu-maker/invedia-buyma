@@ -299,85 +299,46 @@ class BestSourceFinder:
         """ScrapedResult と利益計算を組み合わせて SourceCandidate を生成する。"""
         from lib.scraper.price_sanity import explain_price_rejection, is_plausible_supply_price
 
+        def _err_candidate(error: str, price: Optional[float] = None) -> SourceCandidate:
+            return SourceCandidate(
+                url=url, price=price, currency=scrape.currency,
+                stock_status=scrape.stock_status, jpy_cost=None,
+                profit=None, profit_rate=None, breakdown=None,
+                style_id=scrape.style_id, error=error,
+            )
+
         if not scrape.success or scrape.price is None:
             err = (scrape.error or "価格をページから取得できませんでした")[:160]
             if scrape.raw_price:
                 err = f"{err}（raw: {scrape.raw_price[:40]}）"
-            return SourceCandidate(
-                url=url,
-                price=None,
-                currency=scrape.currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=None,
-                profit=None,
-                profit_rate=None,
-                breakdown=None,
-                style_id=scrape.style_id,
-                error=err,
-            )
+            return _err_candidate(err)
 
         currency = scrape.currency
         if not is_plausible_supply_price(
-            scrape.price,
-            currency,
-            url,
-            buyma_price,
-            effective_rate,
-            raw_price=scrape.raw_price or "",
+            scrape.price, currency, url, buyma_price,
+            effective_rate, raw_price=scrape.raw_price or "",
         ):
-            return SourceCandidate(
-                url=url,
-                price=None,
-                currency=currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=None,
-                profit=None,
-                profit_rate=None,
-                breakdown=None,
-                style_id=scrape.style_id,
-                error=explain_price_rejection(
-                    scrape.price,
-                    currency,
-                    url,
-                    buyma_price,
-                    effective_rate,
-                    raw_price=scrape.raw_price or "",
+            return _err_candidate(
+                explain_price_rejection(
+                    scrape.price, currency, url, buyma_price,
+                    effective_rate, raw_price=scrape.raw_price or "",
                 )[:200],
             )
 
         try:
             breakdown = calculate_profit(
-                local_price=scrape.price,
-                exchange_rate=effective_rate,
-                buyma_price=buyma_price,
-                customs_rate=customs_rate,
-                shipping_cost=shipping_cost_jpy,
-                buyma_fee_rate=buyma_fee_rate,
+                local_price=scrape.price, exchange_rate=effective_rate,
+                buyma_price=buyma_price, customs_rate=customs_rate,
+                shipping_cost=shipping_cost_jpy, buyma_fee_rate=buyma_fee_rate,
             )
             return SourceCandidate(
-                url=url,
-                price=scrape.price,
-                currency=scrape.currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=breakdown.jpy_cost,
-                profit=breakdown.profit,
-                profit_rate=breakdown.profit_rate,
-                breakdown=breakdown,
-                style_id=scrape.style_id,
+                url=url, price=scrape.price, currency=scrape.currency,
+                stock_status=scrape.stock_status, jpy_cost=breakdown.jpy_cost,
+                profit=breakdown.profit, profit_rate=breakdown.profit_rate,
+                breakdown=breakdown, style_id=scrape.style_id,
             )
         except Exception as e:
-            return SourceCandidate(
-                url=url,
-                price=scrape.price,
-                currency=scrape.currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=None,
-                profit=None,
-                profit_rate=None,
-                breakdown=None,
-                style_id=scrape.style_id,
-                error=str(e),
-            )
+            return _err_candidate(str(e), price=scrape.price)
 
     @staticmethod
     def _select_best(
