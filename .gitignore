@@ -26,5 +26,9 @@ credentials.json
 spreadsheet_id.txt
 worksheet_name.txt
 
+# カバレッジレポート
+htmlcov/
+.coverage
+
 # Windows ショートカット（リポジトリ外の bat へのリンク等）
 *.lnk
