@@ -296,6 +296,52 @@ class SheetManager:
         )
 
     # ------------------------------------------------------------------
+    # バリデーション
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def validate_record(record: ProductRecord) -> list[str]:
+        """レコードの値を検証し、問題があればエラーメッセージのリストを返す。"""
+        errors: list[str] = []
+        if not record.商品名.strip():
+            errors.append("商品名が空です")
+
+        for field_name in ("現地価格", "為替", "BUYMA販売価格", "利益額"):
+            raw = getattr(record, field_name).strip()
+            if not raw:
+                continue
+            cleaned = raw.replace(",", "").replace("¥", "").replace("$", "").replace("€", "").replace("£", "")
+            try:
+                val = float(cleaned)
+            except ValueError:
+                errors.append(f"{field_name}が数値ではありません: {raw!r}")
+                continue
+            if field_name in ("現地価格", "為替", "BUYMA販売価格") and val < 0:
+                errors.append(f"{field_name}が負の値です: {raw}")
+
+        url = record.仕入れURL.strip()
+        if url and not url.startswith(("http://", "https://")):
+            errors.append(f"仕入れURLが不正です: {url[:80]}")
+
+        valid_statuses = {"in_stock", "out_of_stock", "unknown", ""}
+        if record.在庫ステータス.strip() not in valid_statuses:
+            errors.append(f"在庫ステータスが不正です: {record.在庫ステータス!r}")
+
+        return errors
+
+    @staticmethod
+    def sanitize_record(record: ProductRecord) -> ProductRecord:
+        """レコードの値をサニタイズして安全に書き込める状態にする。"""
+        record.商品名 = record.商品名.strip()
+        record.ブランド = record.ブランド.strip()
+        record.型番 = record.型番.strip()
+        record.仕入れURL = record.仕入れURL.strip()
+        record.在庫ステータス = record.在庫ステータス.strip()
+        record.同一性スコア = record.同一性スコア.strip()
+        record.価格根拠 = record.価格根拠.strip()[:500]
+        return record
+
+    # ------------------------------------------------------------------
     # 書き込み
     # ------------------------------------------------------------------
 
@@ -312,11 +358,22 @@ class SheetManager:
 
         Google Sheets の「1分あたりの書き込み」制限対策のため、
         1行ずつ append せず append_rows で一括送信する。
+        書き込み前にバリデーション・サニタイズを実行する。
         """
         if not records:
             return
+        validated: list[ProductRecord] = []
+        for rec in records:
+            errs = self.validate_record(rec)
+            if errs:
+                logger.warning("レコード検証エラー (%s): %s", rec.商品名[:30], "; ".join(errs))
+                continue
+            validated.append(self.sanitize_record(rec))
+        if not validated:
+            logger.warning("有効なレコードがありません（全件バリデーションエラー）")
+            return
         ws = self.get_worksheet()
-        rows = [r.to_row() for r in records]
+        rows = [r.to_row() for r in validated]
         for i in range(0, len(rows), chunk_size):
             chunk = rows[i : i + chunk_size]
             self._append_rows_with_retry(ws, chunk)
