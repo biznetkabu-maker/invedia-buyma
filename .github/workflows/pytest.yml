@@ -27,4 +27,4 @@ jobs:
       - name: ruff lint check
         run: ruff check lib/ --no-fix
       - name: mypy type check
-        run: mypy lib/config.py lib/profit_calculator.py lib/file_lock.py lib/logging_config.py --no-error-summary || true
+        run: mypy lib/config.py lib/profit_calculator.py lib/file_lock.py lib/logging_config.py lib/sheet_manager.py lib/forex.py lib/line_notifier.py lib/product_finder.py --no-error-summary
