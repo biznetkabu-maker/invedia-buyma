@@ -347,7 +347,7 @@ async def _lookup_playwright(
                                 return
                         xhr_blobs.append(text)
                     except Exception:
-                        pass
+                        logger.debug("Farfetch XHR parse error", exc_info=True)
 
                 page.on("response", on_response)
                 urls, dbg = await search_farfetch_product_urls(

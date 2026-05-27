@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Optional
 
 logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
 from lib.buyma_demand import BUYMADemandScraper, BUYMADemandSignal
 from lib.forex import get_rate
@@ -903,7 +904,7 @@ def _open_sheet_manager() -> Optional[SheetManager]:
             print(f"     現在の設定タブ名: {config.worksheet_name}")
             print(f"     利用可能なタブ: {', '.join(titles)}")
         except Exception:
-            pass
+            logger.debug("ワークシートタブ一覧取得失敗", exc_info=True)
         return None
 
 

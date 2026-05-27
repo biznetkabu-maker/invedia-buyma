@@ -228,7 +228,7 @@ class FARFETCHStrategy(ScraperStrategy):
                             raw = f"{cur}{val}" if cur else str(val)
                             candidates.append((val, raw))
                     except (TypeError, ValueError):
-                        pass
+                        logger.debug("NEXT_DATA price parse skip", exc_info=True)
                 for v in o.values():
                     collect(v, d + 1)
             elif isinstance(o, list):
