@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import quote_plus, urljoin
 
@@ -370,21 +370,12 @@ async def search_mytheresa_product_urls(
     return urls, debug
 
 
-@dataclass
-class MytheresaSearchDiagnostics:
-    query: str
-    style_id: str
-    playwright_ok: bool
-    playwright_error: str = ""
-    search_url: str = ""
-    bot_blocked: bool = False
-    json_ld_items: int = 0
-    html_link_items: int = 0
-    next_data_items: int = 0
-    xhr_blobs: int = 0
-    candidate_count: int = 0
-    top_candidates: list[dict[str, Any]] = field(default_factory=list)
-    product_urls: list[str] = field(default_factory=list)
+from lib.supply_search.base_search import (
+    SearchDiagnostics as MytheresaSearchDiagnostics,
+)
+from lib.supply_search.base_search import (
+    run_playwright_search,
+)
 
 
 async def _lookup_playwright(
@@ -394,47 +385,20 @@ async def _lookup_playwright(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], MytheresaSearchDiagnostics]:
-    from playwright.async_api import async_playwright
-
-    from lib.supply_search.base_search import launch_stealth_page, make_xhr_collector
+    async def _search(page: Any, *, xhr_blobs: list[str], **_kw: Any) -> tuple[list[str], dict[str, Any]]:
+        return await search_mytheresa_product_urls(
+            page, query, brand=brand, style_id=style_id,
+            product_name=product_name or query, xhr_blobs=xhr_blobs,
+        )
 
     diag = MytheresaSearchDiagnostics(
-        query=query,
-        style_id=style_id,
-        playwright_ok=False,
+        query=query, style_id=style_id, playwright_ok=False,
         search_url=build_mytheresa_search_url(query),
     )
-    xhr_blobs: list[str] = []
-
-    try:
-        async with async_playwright() as pw:
-            browser, _ctx, page = await launch_stealth_page(pw)
-            try:
-                page.on("response", make_xhr_collector("mytheresa", _XHR_URL_HINTS, xhr_blobs))
-                urls, dbg = await search_mytheresa_product_urls(
-                    page,
-                    query,
-                    brand=brand,
-                    style_id=style_id,
-                    product_name=product_name or query,
-                    xhr_blobs=xhr_blobs,
-                )
-                diag.playwright_ok = True
-                diag.bot_blocked = dbg["bot_blocked"]
-                diag.json_ld_items = dbg["json_ld_items"]
-                diag.html_link_items = dbg["html_link_items"]
-                diag.next_data_items = dbg["next_data_items"]
-                diag.xhr_blobs = len(xhr_blobs)
-                diag.top_candidates = dbg["top_scores"]
-                diag.product_urls = urls
-                diag.candidate_count = len(urls)
-                return urls, diag
-            finally:
-                await browser.close()
-    except Exception as e:
-        diag.playwright_error = str(e)
-        logger.debug("mytheresa search playwright failed: %s", e)
-        return [], diag
+    return await run_playwright_search(
+        "mytheresa", _XHR_URL_HINTS, _search,
+        diag.search_url, diag,
+    )
 
 
 def lookup_mytheresa_search_diagnose(

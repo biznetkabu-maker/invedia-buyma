@@ -375,8 +375,7 @@ from lib.supply_search.base_search import (
     SearchDiagnostics as SsenseSearchDiagnostics,
 )
 from lib.supply_search.base_search import (
-    launch_stealth_page,
-    make_xhr_collector,
+    run_playwright_search,
 )
 
 
@@ -388,45 +387,21 @@ async def _lookup_playwright(
     product_name: str = "",
     department: str = "women",
 ) -> tuple[list[str], SsenseSearchDiagnostics]:
-    from playwright.async_api import async_playwright
+    async def _search(page: Any, *, xhr_blobs: list[str], **_kw: Any) -> tuple[list[str], dict[str, Any]]:
+        return await search_ssense_product_urls(
+            page, query, brand=brand, style_id=style_id,
+            product_name=product_name or query, xhr_blobs=xhr_blobs,
+            department=department,
+        )
 
     diag = SsenseSearchDiagnostics(
-        query=query,
-        style_id=style_id,
-        playwright_ok=False,
+        query=query, style_id=style_id, playwright_ok=False,
         search_url=build_ssense_search_url(query, department=department),
     )
-    xhr_blobs: list[str] = []
-
-    try:
-        async with async_playwright() as pw:
-            browser, _ctx, page = await launch_stealth_page(pw)
-            try:
-                page.on("response", make_xhr_collector("ssense.com", _XHR_URL_HINTS, xhr_blobs))
-                urls, dbg = await search_ssense_product_urls(
-                    page,
-                    query,
-                    brand=brand,
-                    style_id=style_id,
-                    product_name=product_name or query,
-                    xhr_blobs=xhr_blobs,
-                    department=department,
-                )
-                diag.playwright_ok = True
-                diag.no_results = dbg["no_results"]
-                diag.json_ld_items = dbg["json_ld_items"]
-                diag.html_link_items = dbg["html_link_items"]
-                diag.xhr_blobs = len(xhr_blobs)
-                diag.top_candidates = dbg["top_scores"]
-                diag.product_urls = urls
-                diag.candidate_count = len(urls)
-                return urls, diag
-            finally:
-                await browser.close()
-    except Exception as e:
-        diag.playwright_error = str(e)
-        logger.debug("ssense search playwright failed: %s", e)
-        return [], diag
+    return await run_playwright_search(
+        "ssense.com", _XHR_URL_HINTS, _search,
+        diag.search_url, diag,
+    )
 
 
 def lookup_ssense_search_diagnose(
@@ -439,10 +414,7 @@ def lookup_ssense_search_diagnose(
 ) -> tuple[list[str], SsenseSearchDiagnostics]:
     return run_sync(
         _lookup_playwright(
-            query,
-            brand=brand,
-            style_id=style_id,
-            product_name=product_name,
-            department=department,
+            query, brand=brand, style_id=style_id,
+            product_name=product_name, department=department,
         )
     )
