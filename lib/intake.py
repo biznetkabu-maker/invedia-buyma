@@ -1115,51 +1115,9 @@ def _scrape_and_select(
                 b.stock_status,
             )
 
-        from lib.scraper.price_sanity import is_plausible_supply_price
-        from lib.style_id_utils import scraped_matches_buyma_style
-
-        style_ref = (buyma_style_id or "").strip()
-        if style_ref and "型番「" in result.reason:
-            print(
-                "  ⚠️  型番が一致する仕入先が無いため、"
-                "誤った商品の価格フォールバックは行いません。"
-            )
-            return "", 0.0, result.match_score, "", "unknown"
-
-        # 全て在庫なし → 型番一致・妥当な価格・利益プラスの候補のみ使用
-        for c in result.all_candidates:
-            if not c.price:
-                continue
-            if style_ref and not scraped_matches_buyma_style(c.style_id, style_ref):
-                print(
-                    f"  ⚠️  型番不一致のため除外: style_id={c.style_id or '未取得'}"
-                )
-                continue
-            if c.profit is not None and c.profit <= 0:
-                print(
-                    f"  ⚠️  利益がマイナスの候補は除外: "
-                    f"{c.currency} {c.price:,.0f} 利益¥{c.profit:,.0f}"
-                )
-                continue
-            if not is_plausible_supply_price(
-                c.price, c.currency, c.url, buyma_price, exchange_rate,
-                raw_price="",
-            ):
-                print(
-                    f"  ⚠️  価格が妥当範囲外のため除外: "
-                    f"{c.currency} {c.price:,.0f} ({c.url[:70]}...)"
-                )
-                continue
-            print(f"  → 在庫なしですが価格取得済みの候補を使用: {c.url[:85]}")
-            return (
-                c.url,
-                c.price,
-                result.match_score,
-                c.style_id or "",
-                c.stock_status,
-            )
-
-        return "", 0.0, result.match_score, "", "unknown"
+        return _select_fallback_candidate(
+            result, buyma_style_id, buyma_price, exchange_rate,
+        )
 
     except Exception as e:
         print(f"  ❌ スクレイプエラー: {e}")
@@ -1170,6 +1128,51 @@ def _scrape_and_select(
             "",
             "unknown",
         )
+
+
+def _select_fallback_candidate(
+    result: "BestSourceResult",
+    buyma_style_id: str,
+    buyma_price: float,
+    exchange_rate: float,
+) -> tuple[str, float, Optional["MatchScore"], str, str]:
+    """best が無い場合に在庫なし候補から型番一致・妥当価格のものを選ぶ。"""
+    from lib.scraper.price_sanity import is_plausible_supply_price
+    from lib.style_id_utils import scraped_matches_buyma_style
+
+    style_ref = (buyma_style_id or "").strip()
+    if style_ref and "型番「" in result.reason:
+        print(
+            "  ⚠️  型番が一致する仕入先が無いため、"
+            "誤った商品の価格フォールバックは行いません。"
+        )
+        return "", 0.0, result.match_score, "", "unknown"
+
+    for c in result.all_candidates:
+        if not c.price:
+            continue
+        if style_ref and not scraped_matches_buyma_style(c.style_id, style_ref):
+            print(f"  ⚠️  型番不一致のため除外: style_id={c.style_id or '未取得'}")
+            continue
+        if c.profit is not None and c.profit <= 0:
+            print(
+                f"  ⚠️  利益がマイナスの候補は除外: "
+                f"{c.currency} {c.price:,.0f} 利益¥{c.profit:,.0f}"
+            )
+            continue
+        if not is_plausible_supply_price(
+            c.price, c.currency, c.url, buyma_price, exchange_rate,
+            raw_price="",
+        ):
+            print(
+                f"  ⚠️  価格が妥当範囲外のため除外: "
+                f"{c.currency} {c.price:,.0f} ({c.url[:70]}...)"
+            )
+            continue
+        print(f"  → 在庫なしですが価格取得済みの候補を使用: {c.url[:85]}")
+        return (c.url, c.price, result.match_score, c.style_id or "", c.stock_status)
+
+    return "", 0.0, result.match_score, "", "unknown"
 
 
 def _evaluate(
