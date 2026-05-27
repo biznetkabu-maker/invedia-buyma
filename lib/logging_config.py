@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -116,22 +117,24 @@ class ScrapeMetrics:
 
     sites: dict[str, SiteMetrics] = field(default_factory=dict)
     start_time: float = field(default_factory=time.time)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record(
         self, site: str, *, success: bool, response_time: float = 0.0
     ) -> None:
-        if site not in self.sites:
-            self.sites[site] = SiteMetrics(site=site)
-        m = self.sites[site]
-        m.total += 1
-        if success:
-            m.success += 1
-        else:
-            m.failure += 1
-        m.total_response_time += response_time
-        if response_time > 0:
-            m.min_response_time = min(m.min_response_time, response_time)
-            m.max_response_time = max(m.max_response_time, response_time)
+        with self._lock:
+            if site not in self.sites:
+                self.sites[site] = SiteMetrics(site=site)
+            m = self.sites[site]
+            m.total += 1
+            if success:
+                m.success += 1
+            else:
+                m.failure += 1
+            m.total_response_time += response_time
+            if response_time > 0:
+                m.min_response_time = min(m.min_response_time, response_time)
+                m.max_response_time = max(m.max_response_time, response_time)
 
     def summary(self) -> dict:
         elapsed = time.time() - self.start_time
@@ -168,6 +171,7 @@ class ScrapeMetrics:
 
 
 # グローバルメトリクスインスタンス
+_metrics_lock = threading.Lock()
 _metrics = ScrapeMetrics()
 
 
@@ -186,4 +190,5 @@ def get_metrics() -> ScrapeMetrics:
 def reset_metrics() -> None:
     """メトリクスをリセットする。"""
     global _metrics
-    _metrics = ScrapeMetrics()
+    with _metrics_lock:
+        _metrics = ScrapeMetrics()
