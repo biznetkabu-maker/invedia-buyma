@@ -457,6 +457,48 @@ def infer_supply_category_hints(product_name: str) -> tuple[list[str], list[str]
     return positive, negative
 
 
+def _build_category_enriched_queries(
+    brand: str,
+    search_sid: str,
+    existing: list[str],
+    raw_or_cleaned: str,
+    official_english_name: str,
+) -> list[str]:
+    """型番＋カテゴリ語で検索精度を上げるクエリ群を生成する。"""
+    if not (search_sid and is_plausible_model_code(search_sid) and brand):
+        return []
+    existing_lower = {q.lower() for q in existing}
+    cat_queries: list[str] = []
+
+    def _add(q: str, *, front: bool = False) -> None:
+        if q.lower() not in existing_lower and q.lower() not in {c.lower() for c in cat_queries}:
+            if front:
+                cat_queries.insert(0, q)
+            else:
+                cat_queries.append(q)
+
+    for hint in category_site_search_extras(raw_or_cleaned)[:3]:
+        _add(f"{brand} {search_sid} {hint}".strip())
+    for token in line_name_search_tokens(raw_or_cleaned, official_english_name)[:2]:
+        _add(f"{brand} {search_sid} {token}".strip(), front=True)
+    if official_english_name:
+        short = " ".join(official_english_name.split()[:4])
+        _add(f"{brand} {search_sid} {short}".strip(), front=True)
+    return cat_queries
+
+
+def _dedupe_queries(queries: list[str]) -> list[str]:
+    """大文字小文字を無視してクエリの重複を除去する。"""
+    seen: set[str] = set()
+    unique: list[str] = []
+    for q in queries:
+        key = q.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(q)
+    return unique
+
+
 def build_supply_search_queries(
     brand: str,
     product_name: str,
@@ -484,30 +526,16 @@ def build_supply_search_queries(
 
     for code in extract_model_codes(product_name, style_id or "", raw):
         if pos and brand and code.upper() == (search_sid or sid).upper():
-            continue  # 型番のみは別SKUヒットしやすい
+            continue
         if brand:
             queries.append(f"{brand} {code}")
         queries.append(code)
 
-    extras = category_site_search_extras(raw or cleaned)
-    line_tokens = line_name_search_tokens(raw or cleaned, official_english_name)
-    if search_sid and is_plausible_model_code(search_sid) and brand:
-        cat_queries: list[str] = []
-        for hint in extras[:3]:
-            cat_q = f"{brand} {search_sid} {hint}".strip()
-            if cat_q.lower() not in {q.lower() for q in queries + cat_queries}:
-                cat_queries.append(cat_q)
-        for token in line_tokens[:2]:
-            cat_q = f"{brand} {search_sid} {token}".strip()
-            if cat_q.lower() not in {q.lower() for q in queries + cat_queries}:
-                cat_queries.insert(0, cat_q)
-        if official_english_name and brand:
-            short = " ".join(official_english_name.split()[:4])
-            off_q = f"{brand} {search_sid} {short}".strip()
-            if off_q.lower() not in {q.lower() for q in queries + cat_queries}:
-                cat_queries.insert(0, off_q)
-        if cat_queries:
-            queries = cat_queries + queries
+    cat_queries = _build_category_enriched_queries(
+        brand, search_sid, queries, raw or cleaned, official_english_name,
+    )
+    if cat_queries:
+        queries = cat_queries + queries
 
     if sid and is_plausible_model_code(sid) and sid not in queries:
         queries.append(sid)
@@ -523,15 +551,7 @@ def build_supply_search_queries(
     if cleaned and cleaned not in queries:
         queries.append(cleaned)
 
-    seen: set[str] = set()
-    unique: list[str] = []
-    for q in queries:
-        key = q.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(q)
-    return unique
+    return _dedupe_queries(queries)
 
 
 def resolve_style_id_for_supply_search(
