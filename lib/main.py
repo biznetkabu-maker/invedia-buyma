@@ -277,6 +277,8 @@ def print_summary(results: list[ProductResult], config: Config) -> None:
     errors = sum(1 for r in results if not r.ok)
 
     separator = "=" * 60
+    logger.info("巡回完了: %s | 対象:%d 出品中:%d 停止:%d 要確認:%d エラー:%d",
+                now, len(results), active, stopped, warning, errors)
     print(f"\n{separator}")
     print(f"  巡回完了: {now}")
     print(f"  対象商品: {len(results)} 件")
