@@ -10,6 +10,8 @@ FARFETCH は検索結果を次の形式で返す（2026-05 時点）:
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import json
 import logging
 import re
@@ -381,7 +383,7 @@ def lookup_farfetch_search_sync(
     style_id: str = "",
     product_name: str = "",
 ) -> list[str]:
-    urls, _ = asyncio.run(
+    urls, _ = run_sync(
         _lookup_playwright(
             query, brand=brand, style_id=style_id, product_name=product_name,
         )
@@ -396,7 +398,7 @@ def lookup_farfetch_search_diagnose(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], FarfetchSearchDiagnostics]:
-    return asyncio.run(
+    return run_sync(
         _lookup_playwright(
             query, brand=brand, style_id=style_id, product_name=product_name,
         )

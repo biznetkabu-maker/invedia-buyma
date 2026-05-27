@@ -7,6 +7,8 @@ intake.py --auto-buyma / --auto-sheet で使用。
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import logging
 import re
 from dataclasses import dataclass
@@ -238,7 +240,7 @@ def fetch_buyma_item_info_sync(
     page_wait_ms: int = 2500,
     timeout_ms: int = 25_000,
 ) -> Optional[BuymaItemInfo]:
-    return asyncio.run(
+    return run_sync(
         fetch_buyma_item_info(
             url,
             headless=headless,

@@ -258,8 +258,8 @@ class NotificationManager:
         if not listings:
             return 0
 
-        import asyncio
-        listing_results = asyncio.run(
+        from lib.async_compat import run_sync
+        listing_results = run_sync(
             automator.post_batch_async(listings, interval_sec=8.0)
         )
         success_count = sum(1 for r in listing_results if r.success)

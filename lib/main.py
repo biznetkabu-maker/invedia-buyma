@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import logging
 import os
 import sys
@@ -594,7 +596,7 @@ def main() -> int:
         )
 
         # メイン処理
-        results = asyncio.run(run(config))
+        results = run_sync(run(config))
 
         # ── 6. サマリー出力 ──────────────────────────────────────────────────
         if results:

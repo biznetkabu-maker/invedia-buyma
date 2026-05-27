@@ -11,6 +11,8 @@ SSENSE 検索 URL（2026-05）:
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import json
 import logging
 import re
@@ -437,7 +439,7 @@ def lookup_ssense_search_diagnose(
     product_name: str = "",
     department: str = "women",
 ) -> tuple[list[str], SsenseSearchDiagnostics]:
-    return asyncio.run(
+    return run_sync(
         _lookup_playwright(
             query,
             brand=brand,

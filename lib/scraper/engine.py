@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import logging
 import os
 from datetime import datetime, timezone
@@ -360,10 +362,10 @@ class PriceScraper:
     # ------------------------------------------------------------------
 
     def scrape(self, url: str) -> ScrapedResult:
-        return asyncio.run(self.scrape_async(url))
+        return run_sync(self.scrape_async(url))
 
     def scrape_many(self, urls: list[str], concurrency: int = 3) -> list[ScrapedResult]:
-        return asyncio.run(self.scrape_many_async(urls, concurrency=concurrency))
+        return run_sync(self.scrape_many_async(urls, concurrency=concurrency))
 
     # ------------------------------------------------------------------
     # ユーティリティ

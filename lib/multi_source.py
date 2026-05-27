@@ -32,6 +32,8 @@
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -185,7 +187,7 @@ class BestSourceFinder:
         fx_buffer_rate: float = 0.03,
     ) -> BestSourceResult:
         """候補URLリストを並列スクレイプし、最優良仕入先を返す（同期版）。"""
-        return asyncio.run(
+        return run_sync(
             self.find_best_async(
                 candidate_urls=candidate_urls,
                 buyma_price=buyma_price,

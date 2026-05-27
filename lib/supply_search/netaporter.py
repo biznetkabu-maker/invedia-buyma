@@ -13,6 +13,8 @@ YNAP グループ（MR PORTER / YOOX と同系列）。
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import json
 import logging
 import re
@@ -495,7 +497,7 @@ def lookup_netaporter_search_diagnose(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], NetaporterSearchDiagnostics]:
-    return asyncio.run(
+    return run_sync(
         _lookup_playwright(
             query,
             brand=brand,

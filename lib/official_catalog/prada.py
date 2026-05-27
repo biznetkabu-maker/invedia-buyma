@@ -493,7 +493,7 @@ def lookup_prada_official_diagnose(
     if use_playwright:
         try:
             import asyncio
-            candidates, pw_debug = asyncio.run(
+            candidates, pw_debug = run_sync(
                 _lookup_playwright(mpn, product_name=product_name)
             )
             diag.playwright_ok = True

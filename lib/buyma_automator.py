@@ -27,6 +27,8 @@ BUYMA 自動出品モジュール（Playwright ブラウザ自動操作）。
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import logging
 import os
 import random
@@ -242,7 +244,7 @@ class BUYMAAutomator:
 
     def post_listing(self, listing: ListingData) -> ListingResult:
         """出品（同期版）。"""
-        return asyncio.run(self.post_listing_async(listing))
+        return run_sync(self.post_listing_async(listing))
 
     async def post_batch_async(
         self, listings: list[ListingData], interval_sec: float = 5.0
@@ -263,7 +265,7 @@ class BUYMAAutomator:
         self, listings: list[ListingData], interval_sec: float = 5.0
     ) -> list[ListingResult]:
         """出品バッチ処理（同期版）。"""
-        return asyncio.run(self.post_batch_async(listings, interval_sec))
+        return run_sync(self.post_batch_async(listings, interval_sec))
 
     # ------------------------------------------------------------------
     # 内部処理

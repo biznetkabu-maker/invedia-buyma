@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import asyncio
+
+from lib.async_compat import run_sync
 import logging
 import os
 import re
@@ -441,7 +443,7 @@ def discover_supply_urls_sync(
     page_wait_ms: int = 3000,
     log_lines: Optional[list[str]] = None,
 ) -> list[SupplyUrlCandidate]:
-    return asyncio.run(
+    return run_sync(
         discover_supply_urls_async(
             brand, product_name, style_id,
             raw_product_name=raw_product_name,
