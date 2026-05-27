@@ -273,36 +273,7 @@ class BestSourceFinder:
             reason,
         )
 
-        from lib.product_identity import (
-            VariantKey,
-            score_when_no_supply,
-            summarize_best_source_result,
-        )
-
-        variant = VariantKey.resolve(sheet_style_id=buyma_style_id or "")
-        if best and best.price is not None and not best.error:
-            price_note = f"{best.currency or '?'} {best.price:,.2f}"
-            if best.profit_rate is not None:
-                price_note += f" 利益率{best.profit_rate:.1%}"
-            match_score = summarize_best_source_result(
-                variant,
-                best_url=best.url,
-                best_style_id=best.style_id,
-                best_stock=best.stock_status,
-                best_price_ok=True,
-                best_price_note=price_note[:160],
-            )
-        elif best:
-            match_score = summarize_best_source_result(
-                variant,
-                best_url=best.url,
-                best_style_id=best.style_id,
-                best_stock=best.stock_status,
-                best_price_ok=False,
-                best_price_note=(best.error or "価格未取得")[:160],
-            )
-        else:
-            match_score = score_when_no_supply(variant, reason=reason[:120])
+        match_score = _compute_match_score(best, buyma_style_id, reason)
 
         return BestSourceResult(
             best=best,
@@ -461,6 +432,43 @@ class BestSourceFinder:
             reason += f" / 型番「{buyma_sid}」一致"
         return best, reason
 
+def _compute_match_score(
+    best: Optional[SourceCandidate],
+    buyma_style_id: Optional[str],
+    reason: str,
+) -> "MatchScore":
+    """最優良候補の有無に応じて MatchScore を生成する。"""
+    from lib.product_identity import (
+        VariantKey,
+        score_when_no_supply,
+        summarize_best_source_result,
+    )
+
+    variant = VariantKey.resolve(sheet_style_id=buyma_style_id or "")
+    if best and best.price is not None and not best.error:
+        price_note = f"{best.currency or '?'} {best.price:,.2f}"
+        if best.profit_rate is not None:
+            price_note += f" 利益率{best.profit_rate:.1%}"
+        return summarize_best_source_result(
+            variant,
+            best_url=best.url,
+            best_style_id=best.style_id,
+            best_stock=best.stock_status,
+            best_price_ok=True,
+            best_price_note=price_note[:160],
+        )
+    if best:
+        return summarize_best_source_result(
+            variant,
+            best_url=best.url,
+            best_style_id=best.style_id,
+            best_stock=best.stock_status,
+            best_price_ok=False,
+            best_price_note=(best.error or "価格未取得")[:160],
+        )
+    return score_when_no_supply(variant, reason=reason[:120])
+
+
 # ============================================================================
 # P3: 価格マルチソース投票
 # ============================================================================
@@ -561,35 +569,9 @@ def compute_price_consensus(
     prices = [v.price for v in primary_votes]
     median_price = statistics.median(prices)
 
-    inliers: list[PriceVote] = []
-    outliers: list[PriceVote] = []
-    for v in primary_votes:
-        deviation = abs(v.price - median_price) / median_price if median_price else 0
-        if deviation <= outlier_threshold:
-            inliers.append(v)
-        else:
-            outliers.append(v)
-
-    if not inliers:
-        inliers = primary_votes
-        outliers = []
-
+    inliers, outliers = _split_outliers(primary_votes, median_price, outlier_threshold)
     consensus_price = statistics.median([v.price for v in inliers])
-
-    if not outliers and len(set(round(v.price, 2) for v in inliers)) == 1:
-        method = "unanimous"
-        confidence = 1.0
-    else:
-        method = "median"
-        inlier_prices = [v.price for v in inliers]
-        if len(inlier_prices) >= 2:
-            spread = max(inlier_prices) - min(inlier_prices)
-            relative_spread = spread / consensus_price if consensus_price else 0
-            confidence = max(0.5, min(1.0, 1.0 - relative_spread))
-        else:
-            confidence = 0.6
-        if outliers:
-            confidence *= max(0.7, 1.0 - 0.1 * len(outliers))
+    method, confidence = _consensus_confidence(inliers, outliers, consensus_price)
 
     return PriceConsensus(
         consensus_price=consensus_price,
@@ -599,6 +581,44 @@ def compute_price_consensus(
         confidence=round(confidence, 3),
         method=method,
     )
+
+
+def _split_outliers(
+    votes: list[PriceVote], median_price: float, threshold: float,
+) -> tuple[list[PriceVote], list[PriceVote]]:
+    """投票を中央値からの乖離率で inlier / outlier に分類する。"""
+    inliers: list[PriceVote] = []
+    outliers: list[PriceVote] = []
+    for v in votes:
+        deviation = abs(v.price - median_price) / median_price if median_price else 0
+        if deviation <= threshold:
+            inliers.append(v)
+        else:
+            outliers.append(v)
+    if not inliers:
+        return votes, []
+    return inliers, outliers
+
+
+def _consensus_confidence(
+    inliers: list[PriceVote],
+    outliers: list[PriceVote],
+    consensus_price: float,
+) -> tuple[str, float]:
+    """合意方式と信頼度を算出する。"""
+    if not outliers and len(set(round(v.price, 2) for v in inliers)) == 1:
+        return "unanimous", 1.0
+
+    inlier_prices = [v.price for v in inliers]
+    if len(inlier_prices) >= 2:
+        spread = max(inlier_prices) - min(inlier_prices)
+        relative_spread = spread / consensus_price if consensus_price else 0
+        confidence = max(0.5, min(1.0, 1.0 - relative_spread))
+    else:
+        confidence = 0.6
+    if outliers:
+        confidence *= max(0.7, 1.0 - 0.1 * len(outliers))
+    return "median", confidence
 
 
 def _extract_site_name(url: str) -> str:
