@@ -18,7 +18,7 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Optional
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus
 
 from lib.supply_search.json_walk import (
     SearchHit,
@@ -343,32 +343,14 @@ def merge_search_hits(
     product_name: str,
     brand: str,
 ) -> list[str]:
-    urls: list[str] = []
-    seen: set[str] = set()
+    from lib.supply_search.base_search import merge_ranked_urls
 
     ranked = rank_24s_catalog_items(
         catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
     )
-    for item, score in ranked:
-        if score < 0:
-            continue
-        u = item.url.split("?")[0]
-        if u not in seen and is_valid_24s_product_url(u):
-            seen.add(u)
-            urls.append(u)
-
-    for hit in sorted(xhr_hits, key=lambda h: h.score, reverse=True):
-        u = (hit.url or "").split("?")[0]
-        if not u or u in seen:
-            continue
-        if not u.startswith("http"):
-            u = urljoin(_BASE, u)
-        if not is_valid_24s_product_url(u):
-            continue
-        seen.add(u)
-        urls.append(u)
-
-    return urls
+    return merge_ranked_urls(
+        ranked, xhr_hits, base_url=_BASE, url_validator=is_valid_24s_product_url,
+    )
 
 
 async def search_24s_product_urls(

@@ -152,6 +152,94 @@ def extract_product_urls_from_html(
     return urls
 
 
+def merge_ranked_urls(
+    ranked: list[tuple[Any, int]],
+    xhr_hits: list[Any],
+    *,
+    base_url: str,
+    url_validator: Any,
+    min_score: int = 0,
+) -> list[str]:
+    """ランキング済みカタログアイテムと XHR ヒットから URL リストをマージする。
+
+    Args:
+        ranked: (item, score) タプルのリスト
+        xhr_hits: SearchHit のリスト
+        base_url: 相対 URL のベース
+        url_validator: URL の妥当性を検証する関数
+        min_score: カタログアイテムに必要な最低スコア
+    """
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    for item, score in ranked:
+        if score < min_score:
+            continue
+        u = item.url.split("?")[0]
+        if u not in seen and url_validator(u):
+            seen.add(u)
+            urls.append(u)
+
+    for hit in sorted(xhr_hits, key=lambda h: h.score, reverse=True):
+        u = (hit.url or "").split("?")[0]
+        if not u or u in seen:
+            continue
+        if not u.startswith("http"):
+            u = urljoin(base_url, u)
+        if not url_validator(u):
+            continue
+        seen.add(u)
+        urls.append(u)
+
+    return urls
+
+
+async def run_playwright_search(
+    domain: str,
+    xhr_url_hints: tuple[str, ...],
+    search_func: Any,
+    search_url: str,
+    diag: SearchDiagnostics,
+    **search_kwargs: Any,
+) -> tuple[list[str], SearchDiagnostics]:
+    """Playwright で検索を実行する共通パターン。
+
+    Args:
+        domain: XHR 収集対象ドメイン
+        xhr_url_hints: XHR URL ヒント
+        search_func: async def search_func(page, query, *, xhr_blobs, **kwargs) -> (urls, debug)
+        search_url: 検索 URL（diag 用）
+        diag: SearchDiagnostics インスタンス
+        **search_kwargs: search_func に渡す追加引数
+    """
+    from playwright.async_api import async_playwright
+
+    xhr_blobs: list[str] = []
+    try:
+        async with async_playwright() as pw:
+            browser, _ctx, page = await launch_stealth_page(pw)
+            try:
+                page.on("response", make_xhr_collector(domain, xhr_url_hints, xhr_blobs))
+                urls, dbg = await search_func(page, xhr_blobs=xhr_blobs, **search_kwargs)
+                diag.playwright_ok = True
+                diag.json_ld_items = dbg.get("json_ld_items", 0)
+                diag.html_link_items = dbg.get("html_link_items", 0)
+                diag.xhr_blobs = len(xhr_blobs)
+                diag.top_candidates = dbg.get("top_scores", [])
+                diag.product_urls = urls
+                diag.candidate_count = len(urls)
+                for key in ("no_results", "access_denied"):
+                    if key in dbg:
+                        setattr(diag, key, dbg[key])
+                return urls, diag
+            finally:
+                await browser.close()
+    except Exception as e:
+        diag.playwright_error = str(e)
+        logger.debug("%s search playwright failed: %s", domain, e)
+        return [], diag
+
+
 def build_top_scores_debug(
     ranked: list[tuple[Any, int]],
     *,

@@ -224,31 +224,14 @@ def merge_search_hits(
     brand: str,
 ) -> list[str]:
     """カタログ + XHR を統合し URL リストを返す。"""
-    urls: list[str] = []
-    seen: set[str] = set()
+    from lib.supply_search.base_search import merge_ranked_urls
 
     ranked = rank_farfetch_catalog_items(
         catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
     )
-    for item, score in ranked:
-        if score < 0:
-            continue
-        u = item.url.split("?")[0]
-        if u not in seen and is_valid_farfetch_product_url(u):
-            seen.add(u)
-            urls.append(u)
-
-    xhr_ranked = sorted(xhr_hits, key=lambda h: h.score, reverse=True)
-    for hit in xhr_ranked:
-        u = (hit.url or "").split("?")[0]
-        if not u or u in seen:
-            continue
-        if not is_valid_farfetch_product_url(u):
-            continue
-        seen.add(u)
-        urls.append(u)
-
-    return urls
+    return merge_ranked_urls(
+        ranked, xhr_hits, base_url=_BASE, url_validator=is_valid_farfetch_product_url,
+    )
 
 
 async def search_farfetch_product_urls(
