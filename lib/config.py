@@ -171,7 +171,10 @@ class Config:
             tmp.flush()
             tmp.close()
             # 異常終了時にも一時ファイルを確実に削除
-            atexit.register(lambda p=tmp.name: os.unlink(p) if os.path.exists(p) else None)
+            def _cleanup_tmp(path: str = tmp.name) -> None:
+                if os.path.exists(path):
+                    os.unlink(path)
+            atexit.register(_cleanup_tmp)
             return tmp.name, tmp.name
 
         # ローカル開発用: ファイルパスを直接使用
