@@ -432,11 +432,24 @@ def discover_supply_urls_sync(
     brand: str,
     product_name: str,
     style_id: Optional[str] = None,
-    **kwargs: object,
+    *,
+    raw_product_name: Optional[str] = None,
+    official_english_name: str = "",
+    headless: bool = True,
+    max_sites: int = 5,
+    timeout_ms: Optional[int] = None,
+    page_wait_ms: int = 3000,
+    log_lines: Optional[list[str]] = None,
 ) -> list[SupplyUrlCandidate]:
-    log = kwargs.pop("log_lines", None)
     return asyncio.run(
         discover_supply_urls_async(
-            brand, product_name, style_id, log_lines=log, **kwargs  # type: ignore[arg-type]
+            brand, product_name, style_id,
+            raw_product_name=raw_product_name,
+            official_english_name=official_english_name,
+            headless=headless,
+            max_sites=max_sites,
+            timeout_ms=timeout_ms,
+            page_wait_ms=page_wait_ms,
+            log_lines=log_lines,
         )
     )

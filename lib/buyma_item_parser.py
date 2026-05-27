@@ -231,5 +231,18 @@ async def fetch_buyma_item_info(
         return None
 
 
-def fetch_buyma_item_info_sync(url: str, **kwargs: object) -> Optional[BuymaItemInfo]:
-    return asyncio.run(fetch_buyma_item_info(url, **kwargs))  # type: ignore[arg-type]
+def fetch_buyma_item_info_sync(
+    url: str,
+    *,
+    headless: bool = True,
+    page_wait_ms: int = 2500,
+    timeout_ms: int = 25_000,
+) -> Optional[BuymaItemInfo]:
+    return asyncio.run(
+        fetch_buyma_item_info(
+            url,
+            headless=headless,
+            page_wait_ms=page_wait_ms,
+            timeout_ms=timeout_ms,
+        )
+    )
