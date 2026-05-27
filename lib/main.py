@@ -16,9 +16,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
-from lib.async_compat import run_sync
 import logging
 import os
 import sys
@@ -27,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from lib.async_compat import run_sync
 from lib.config import Config
 from lib.forex import get_rates_for_sheet, update_sheet_exchange_rates
 from lib.multi_source import BestSourceFinder, BestSourceResult, style_id_consistent_with_buyma

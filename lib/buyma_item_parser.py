@@ -6,14 +6,12 @@ intake.py --auto-buyma / --auto-sheet で使用。
 
 from __future__ import annotations
 
-import asyncio
-
-from lib.async_compat import run_sync
 import logging
 import re
 from dataclasses import dataclass
 from typing import Optional
 
+from lib.async_compat import run_sync
 from lib.buyma_style_id import (
     extract_primary_style_id_from_buyma_html,
     is_buyma_item_url,

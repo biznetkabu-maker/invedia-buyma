@@ -10,9 +10,6 @@ SSENSE 検索 URL（2026-05）:
 
 from __future__ import annotations
 
-import asyncio
-
-from lib.async_compat import run_sync
 import json
 import logging
 import re
@@ -20,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import quote_plus
 
+from lib.async_compat import run_sync
 from lib.supply_search.json_walk import (
     SearchHit,
     collect_hits_from_json_text,

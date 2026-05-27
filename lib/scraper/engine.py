@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-
-from lib.async_compat import run_sync
 import logging
 import os
 from datetime import datetime, timezone
@@ -12,6 +10,8 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from playwright.async_api import Browser, BrowserContext, async_playwright
+
+from lib.async_compat import run_sync
 
 from .base import ScraperStrategy
 from .models import ScrapedResult

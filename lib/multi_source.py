@@ -31,14 +31,12 @@
 
 from __future__ import annotations
 
-import asyncio
-
-from lib.async_compat import run_sync
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
+from lib.async_compat import run_sync
 from lib.profit_calculator import ProfitBreakdown, calculate_profit
 from lib.scraper import PriceScraper
 from lib.scraper.models import ScrapedResult

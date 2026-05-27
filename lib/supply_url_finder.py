@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import asyncio
-
-from lib.async_compat import run_sync
 import logging
 import os
 import re
@@ -14,6 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import quote_plus, urlparse
 
+from lib.async_compat import run_sync
 from lib.product_finder import ALL_SITES, SiteDefinition
 from lib.supply_search_utils import (
     build_supply_search_queries,

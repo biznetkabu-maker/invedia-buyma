@@ -46,6 +46,30 @@ logging.basicConfig(level=logging.WARNING)
 
 from lib.buyma_demand import BUYMADemandScraper, BUYMADemandSignal
 from lib.forex import get_rate
+from lib.intake_cli import (
+    ask as _ask,
+)
+from lib.intake_cli import (
+    ask_float as _ask_float,
+)
+from lib.intake_cli import (
+    ask_int as _ask_int,
+)
+from lib.intake_cli import (
+    ask_yn as _ask_yn,
+)
+from lib.intake_cli import (
+    print_header as _print_header,
+)
+from lib.intake_cli import (
+    print_score as _print_score,
+)
+from lib.intake_cli import (
+    print_step as _print_step,
+)
+from lib.intake_cli import (
+    require as _require,
+)
 from lib.product_finder import build_search_urls
 from lib.purchase_evaluator import (
     EvaluationInput,
@@ -55,17 +79,6 @@ from lib.purchase_evaluator import (
     _is_stable_category,
 )
 from lib.sheet_manager import ProductRecord, SheetManager
-
-from lib.intake_cli import (
-    ask as _ask,
-    ask_float as _ask_float,
-    ask_int as _ask_int,
-    ask_yn as _ask_yn,
-    print_header as _print_header,
-    print_score as _print_score,
-    print_step as _print_step,
-    require as _require,
-)
 
 # ============================================================================
 # 定数

@@ -27,8 +27,6 @@ BUYMA 自動出品モジュール（Playwright ブラウザ自動操作）。
 from __future__ import annotations
 
 import asyncio
-
-from lib.async_compat import run_sync
 import logging
 import os
 import random
@@ -36,6 +34,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from lib.async_compat import run_sync
 
 logger = logging.getLogger(__name__)
 

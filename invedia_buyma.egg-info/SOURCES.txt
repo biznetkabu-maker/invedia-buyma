@@ -13,6 +13,7 @@ lib/buyma_researcher.py
 lib/buyma_style_id.py
 lib/config.py
 lib/evaluate.py
+lib/file_lock.py
 lib/forex.py
 lib/funnel_policy.py
 lib/image_processor.py
@@ -20,6 +21,7 @@ lib/intake.py
 lib/intake_funnel.py
 lib/line_notifier.py
 lib/line_webhook.py
+lib/logging_config.py
 lib/main.py
 lib/multi_source.py
 lib/notification_manager.py
@@ -66,6 +68,7 @@ lib/scraper/strategies/theoutnet.py
 lib/scraper/strategies/twentyfoursevens.py
 lib/scraper/strategies/yoox.py
 lib/supply_search/__init__.py
+lib/supply_search/base_search.py
 lib/supply_search/farfetch.py
 lib/supply_search/json_walk.py
 lib/supply_search/mytheresa.py
@@ -74,19 +77,25 @@ lib/supply_search/ssense.py
 lib/supply_search/twentyfoursevens.py
 tests/test_all_strategies.py
 tests/test_bookmarklet_build.py
+tests/test_buyma_automator.py
 tests/test_buyma_item_parser.py
 tests/test_buyma_style_id.py
 tests/test_demand_and_finder.py
+tests/test_evaluate.py
 tests/test_forex.py
 tests/test_import_buyma_tsv.py
 tests/test_intake_auto.py
 tests/test_intake_funnel.py
 tests/test_intake_price.py
+tests/test_line_webhook.py
+tests/test_logging_config.py
+tests/test_main_integration.py
 tests/test_main_logic.py
 tests/test_multi_source.py
 tests/test_new_strategies.py
 tests/test_notifications_and_image.py
 tests/test_official_prada.py
+tests/test_price_consensus.py
 tests/test_price_sanity.py
 tests/test_price_scraper.py
 tests/test_product_identity.py
@@ -95,6 +104,7 @@ tests/test_purchase_evaluator.py
 tests/test_setup_simple.py
 tests/test_sheet_analysis.py
 tests/test_sheet_manager.py
+tests/test_sheets_retry.py
 tests/test_supply_search_24s.py
 tests/test_supply_search_farfetch.py
 tests/test_supply_search_mytheresa.py
