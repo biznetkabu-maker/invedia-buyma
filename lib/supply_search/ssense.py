@@ -218,6 +218,36 @@ def _has_category_intent(product_name: str) -> bool:
     return any(t in name_l for t in tokens)
 
 
+def _category_intent_delta(
+    blob: str, path: str, product_name: str, pos: list[str], neg: list[str]
+) -> int:
+    """カテゴリ意図がある場合のヒント加減点。"""
+    delta = 0
+    for hint in pos:
+        h = hint.lower().replace("-", " ")
+        if h in blob or h.replace(" ", "-") in path.lower():
+            delta += 25
+        if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag")):
+            delta += 25
+        if hint == "wallet" and "wallet" in blob:
+            delta += 25
+        if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
+            delta += 20
+        if hint in ("sunglasses", "eyewear") and any(
+            k in blob for k in ("sunglass", "eyewear", "サングラス", "glasses")
+        ):
+            delta += 25
+    for hint in neg:
+        if hint.lower() in blob:
+            delta -= 40
+    if "eyewear" in blob and not any(
+        x in (product_name or "").lower()
+        for x in ("sunglass", "eyewear", "サングラス", "メガネ", "glasses")
+    ):
+        delta -= 25
+    return delta
+
+
 def _score_item(
     item: SsenseCatalogItem,
     *,
@@ -234,31 +264,9 @@ def _score_item(
             score += 100
         if item.sku and style_id_matches_loose(sid, item.sku):
             score += 90
-    category_intent = _has_category_intent(product_name)
     pos, neg = infer_supply_category_hints(product_name)
-    if category_intent:
-        for hint in pos:
-            h = hint.lower().replace("-", " ")
-            if h in blob or h.replace(" ", "-") in item.path.lower():
-                score += 25
-            if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag")):
-                score += 25
-            if hint == "wallet" and "wallet" in blob:
-                score += 25
-            if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
-                score += 20
-            if hint in ("sunglasses", "eyewear") and any(
-                k in blob for k in ("sunglass", "eyewear", "サングラス", "glasses")
-            ):
-                score += 25
-        for hint in neg:
-            if hint.lower() in blob:
-                score -= 40
-        if "eyewear" in blob and not any(
-            x in (product_name or "").lower()
-            for x in ("sunglass", "eyewear", "サングラス", "メガネ", "glasses")
-        ):
-            score -= 25
+    if _has_category_intent(product_name):
+        score += _category_intent_delta(blob, item.path, product_name, pos, neg)
     if brand and not _brand_matches(brand, item.brand, item.name, item.path):
         score -= 50
     if not is_valid_ssense_product_url(item.url):

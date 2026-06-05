@@ -343,102 +343,97 @@ def apply_department_to_search_template(template: str, department: str, domain: 
     return tpl
 
 
+def _bag_category_hints(name_l: str) -> tuple[list[str], list[str]]:
+    """汎用バッグ系の加点語をサブカテゴリ別に決める。"""
+    if any(k in name_l for k in ("クロシェ", "crochet")):
+        positive = ["crochet", "tote", "bag"]
+    elif any(k in name_l for k in ("ショルダー", "shoulder", "2way", "2-way")):
+        positive = ["shoulder-bag", "shoulder", "bag"]
+    elif any(k in name_l for k in ("トート", "tote")):
+        positive = ["tote", "bag", "shoulder"]
+    else:
+        positive = ["bag", "shoulder", "tote"]
+    return positive, ["eyewear", "sunglasses", "trouser", "pouch", "wallet"]
+
+
+def _footwear_category_hints(name_l: str) -> tuple[list[str], list[str]]:
+    """フットウェア系の加点語をサブカテゴリ別に決める。"""
+    if any(k in name_l for k in ("スニーカー", "sneaker", "trainer")):
+        positive = ["sneaker", "sneakers", "shoes", "trainers"]
+    elif any(k in name_l for k in ("サンダル", "sandal", "slide")):
+        positive = ["sandal", "sandals", "slide", "slides", "shoes"]
+    else:
+        positive = ["shoes", "sneakers", "sandal"]
+    return positive, ["wallet", "eyewear", "sunglasses", "pouch", "bag", "leather-wallet", "t-shirt"]
+
+
 def infer_supply_category_hints(product_name: str) -> tuple[list[str], list[str]]:
     """探索・ランキング用のカテゴリ語（加点）と URL パス除外語（減点）。"""
     name_l = (product_name or "").lower()
-    positive: list[str] = []
-    negative: list[str] = []
 
-    if any(k in name_l for k in ("サングラス", "sunglass", "eyewear", "メガネ", "眼鏡")):
-        positive.extend(("sunglasses", "eyewear", "glasses"))
-        negative.extend(("wallet", "trouser", "boots", "boot"))
-    elif any(k in name_l for k in ("財布", "wallet", "ウォレット")):
-        positive.extend(("wallet", "zip", "saffiano", "leather-wallet"))
-        negative.extend(("eyewear", "sunglasses", "trouser", "boot"))
-    elif is_fragment_case_product_name(product_name):
-        positive.extend(("fragment", "card-holder", "card-case", "card"))
-        negative.extend(
-            ("eyewear", "sunglasses", "trouser", "boot", "bag", "tote", "pouch")
-        )
-    elif any(
-        k in name_l
-        for k in ("ハンドバッグ", "handbag", "hand bag", "hand-bag")
-    ):
-        positive.extend(("hand-bag", "handbag", "bag", "tote"))
-        negative.extend(("eyewear", "sunglasses", "wallet", "pouch", "trouser"))
-    elif any(
-        k in name_l
-        for k in ("バケット", "bucket bag", "bucket-bag", "bucket")
-    ) or any(k in name_l for k in ("ウィッカー", "wicker", "ラタン", "rattan")):
-        positive.extend(("wicker", "bucket-bag", "bucket", "bag"))
-        negative.extend(
-            ("eyewear", "sunglasses", "wallet", "pouch", "darling", "wish", "re-nylon")
-        )
-    elif any(
-        k in name_l
-        for k in ("ドックキャリ", "キャリーバッグ", "dog carrier", "pet carrier")
-    ):
-        positive.extend(("dog-carrier", "carrier", "tote", "bag"))
-        negative.extend(("pouch", "wallet", "mini-pouch", "eyewear", "sunglasses"))
-    elif any(
-        k in name_l
-        for k in (
-            "ベルトバッグ",
-            "ボディバッグ",
-            "belt bag",
-            "body bag",
-            "bum bag",
-            "waist bag",
-        )
-    ):
-        positive.extend(("belt-bag", "body-bag", "bum-bag", "crossbody"))
-        negative.extend(("wallet", "eyewear", "sunglasses", "trouser", "boot", "pouch"))
-    elif any(k in name_l for k in ("バッグ", "bag", "トート", "tote")):
-        if any(k in name_l for k in ("クロシェ", "crochet")):
-            positive.extend(("crochet", "tote", "bag"))
-        elif any(k in name_l for k in ("ショルダー", "shoulder", "2way", "2-way")):
-            positive.extend(("shoulder-bag", "shoulder", "bag"))
-        elif any(k in name_l for k in ("トート", "tote")):
-            positive.extend(("tote", "bag", "shoulder"))
-        else:
-            positive.extend(("bag", "shoulder", "tote"))
-        negative.extend(("eyewear", "sunglasses", "trouser", "pouch", "wallet"))
-    elif is_footwear_product_name(product_name):
-        if any(k in name_l for k in ("スニーカー", "sneaker", "trainer")):
-            positive.extend(("sneaker", "sneakers", "shoes", "trainers"))
-        elif any(k in name_l for k in ("サンダル", "sandal", "slide")):
-            positive.extend(("sandal", "sandals", "slide", "slides", "shoes"))
-        else:
-            positive.extend(("shoes", "sneakers", "sandal"))
-        negative.extend(
-            ("wallet", "eyewear", "sunglasses", "pouch", "bag", "leather-wallet", "t-shirt")
-        )
-    elif is_primary_pouch_product_name(product_name):
-        positive.extend(("pouch", "bag"))
-        negative.extend(("eyewear", "sunglasses", "trouser", "wallet"))
-    elif any(
-        k in name_l
-        for k in (
-            "tシャツ", "t-shirt", "t shirt", "Ｔシャツ", "tee",
-            "トップス", "シャツ", "shirt", "ポロ", "カーディガン",
-            "ニット", "スウェット", "パーカー", "フーディ", "hoodie",
-            "コート", "ジャケット", "jacket", "dress", "スカート",
-        )
-    ):
-        positive.extend(("t-shirt", "shirt", "top"))
-        negative.extend(("wallet", "eyewear", "sunglasses", "leather-wallet", "bag"))
-    else:
-        from lib.funnel_policy import is_eyewear_product_name
+    def kw(*words: str) -> bool:
+        return any(w in name_l for w in words)
 
-        if is_eyewear_product_name(product_name):
-            positive.extend(("sunglasses", "eyewear"))
-            negative.extend(("wallet", "trouser"))
-        else:
-            # 型番のみ・セール等 — eyewear は DDG/FARFETCH 検索のノイズになりやすい
-            positive.extend(("wallet", "leather-wallet", "bag", "saffiano"))
-            negative.extend(("eyewear", "sunglasses", "trouser", "boot"))
+    if kw("サングラス", "sunglass", "eyewear", "メガネ", "眼鏡"):
+        return (["sunglasses", "eyewear", "glasses"], ["wallet", "trouser", "boots", "boot"])
+    if kw("財布", "wallet", "ウォレット"):
+        return (
+            ["wallet", "zip", "saffiano", "leather-wallet"],
+            ["eyewear", "sunglasses", "trouser", "boot"],
+        )
+    if is_fragment_case_product_name(product_name):
+        return (
+            ["fragment", "card-holder", "card-case", "card"],
+            ["eyewear", "sunglasses", "trouser", "boot", "bag", "tote", "pouch"],
+        )
+    if kw("ハンドバッグ", "handbag", "hand bag", "hand-bag"):
+        return (
+            ["hand-bag", "handbag", "bag", "tote"],
+            ["eyewear", "sunglasses", "wallet", "pouch", "trouser"],
+        )
+    if kw("バケット", "bucket bag", "bucket-bag", "bucket") or kw(
+        "ウィッカー", "wicker", "ラタン", "rattan"
+    ):
+        return (
+            ["wicker", "bucket-bag", "bucket", "bag"],
+            ["eyewear", "sunglasses", "wallet", "pouch", "darling", "wish", "re-nylon"],
+        )
+    if kw("ドックキャリ", "キャリーバッグ", "dog carrier", "pet carrier"):
+        return (
+            ["dog-carrier", "carrier", "tote", "bag"],
+            ["pouch", "wallet", "mini-pouch", "eyewear", "sunglasses"],
+        )
+    if kw("ベルトバッグ", "ボディバッグ", "belt bag", "body bag", "bum bag", "waist bag"):
+        return (
+            ["belt-bag", "body-bag", "bum-bag", "crossbody"],
+            ["wallet", "eyewear", "sunglasses", "trouser", "boot", "pouch"],
+        )
+    if kw("バッグ", "bag", "トート", "tote"):
+        return _bag_category_hints(name_l)
+    if is_footwear_product_name(product_name):
+        return _footwear_category_hints(name_l)
+    if is_primary_pouch_product_name(product_name):
+        return (["pouch", "bag"], ["eyewear", "sunglasses", "trouser", "wallet"])
+    if kw(
+        "tシャツ", "t-shirt", "t shirt", "Ｔシャツ", "tee",
+        "トップス", "シャツ", "shirt", "ポロ", "カーディガン",
+        "ニット", "スウェット", "パーカー", "フーディ", "hoodie",
+        "コート", "ジャケット", "jacket", "dress", "スカート",
+    ):
+        return (
+            ["t-shirt", "shirt", "top"],
+            ["wallet", "eyewear", "sunglasses", "leather-wallet", "bag"],
+        )
 
-    return positive, negative
+    from lib.funnel_policy import is_eyewear_product_name
+
+    if is_eyewear_product_name(product_name):
+        return (["sunglasses", "eyewear"], ["wallet", "trouser"])
+    # 型番のみ・セール等 — eyewear は DDG/FARFETCH 検索のノイズになりやすい
+    return (
+        ["wallet", "leather-wallet", "bag", "saffiano"],
+        ["eyewear", "sunglasses", "trouser", "boot"],
+    )
 
 
 def _build_category_enriched_queries(

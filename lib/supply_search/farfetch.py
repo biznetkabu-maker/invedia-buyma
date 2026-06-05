@@ -141,6 +141,34 @@ def parse_farfetch_search_html(html: str) -> list[FarfetchCatalogItem]:
     return _parse_apollo_catalog(html)
 
 
+def _dept_delta(path: str, product_name: str) -> int:
+    """部門（men/women）の一致/不一致による加減点。"""
+    dept = infer_supply_department(product_name)
+    p = path.lower()
+    if dept == "men" and "/men/" in p:
+        return 25
+    if dept == "men" and "/women/" in p:
+        return -35
+    return 0
+
+
+def _footwear_delta(blob: str, product_name: str) -> int:
+    """フットウェア商品向けの加減点（靴以外の誤マッチを抑制）。"""
+    if not is_footwear_product_name(product_name):
+        return 0
+    shoe_kw = ("sandal", "mule", "slide", "shoe", "sneaker", "boot", "trainer", "platform")
+    delta = 0
+    if not any(k in blob for k in shoe_kw):
+        delta -= 55
+    for bad in ("wish", "re-nylon", "wallet", "pouch", "handbag", "tote"):
+        if bad in blob and not any(k in blob for k in ("sandal", "mule", "slide", "shoe")):
+            delta -= 45
+    for token in line_name_search_tokens(product_name):
+        if token in blob:
+            delta += 35
+    return delta
+
+
 def _score_item(
     item: FarfetchCatalogItem,
     *,
@@ -156,11 +184,7 @@ def _score_item(
         if compact and compact in normalize_style_token(blob):
             score += 100
     pos, neg = infer_supply_category_hints(product_name)
-    dept = infer_supply_department(product_name)
-    if dept == "men" and "/men/" in item.path.lower():
-        score += 25
-    elif dept == "men" and "/women/" in item.path.lower():
-        score -= 35
+    score += _dept_delta(item.path, product_name)
     for hint in pos:
         h = hint.lower().replace("-", " ")
         if h in blob or h.replace(" ", "-") in item.path.lower():
@@ -180,18 +204,7 @@ def _score_item(
         x in (product_name or "").lower() for x in ("sunglass", "eyewear", "サングラス", "メガネ")
     ):
         score -= 30
-    if is_footwear_product_name(product_name):
-        if not any(
-            k in blob
-            for k in ("sandal", "mule", "slide", "shoe", "sneaker", "boot", "trainer", "platform")
-        ):
-            score -= 55
-        for bad in ("wish", "re-nylon", "wallet", "pouch", "handbag", "tote"):
-            if bad in blob and not any(k in blob for k in ("sandal", "mule", "slide", "shoe")):
-                score -= 45
-        for token in line_name_search_tokens(product_name):
-            if token in blob:
-                score += 35
+    score += _footwear_delta(blob, product_name)
     if not is_valid_farfetch_product_url(item.url):
         score -= 100
     if item.source == "json_ld_itemlist":

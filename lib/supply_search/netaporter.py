@@ -280,6 +280,31 @@ def _has_category_intent(product_name: str) -> bool:
     return any(t in name_l for t in tokens)
 
 
+def _category_intent_delta(blob: str, path: str, product_name: str) -> int:
+    """カテゴリ意図がある場合のヒント加減点。"""
+    pos, neg = infer_supply_category_hints(product_name)
+    delta = 0
+    for hint in pos:
+        h = hint.lower().replace("-", " ")
+        if h in blob or h.replace(" ", "-") in path.lower():
+            delta += 25
+        if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag", "tote")):
+            delta += 25
+        if hint == "wallet" and "wallet" in blob:
+            delta += 25
+        if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
+            delta += 20
+    for hint in neg:
+        if hint.lower() in blob:
+            delta -= 40
+    if "eyewear" in blob and not any(
+        x in (product_name or "").lower()
+        for x in ("sunglass", "eyewear", "サングラス", "メガネ", "glasses")
+    ):
+        delta -= 25
+    return delta
+
+
 def _score_item(
     item: NetaporterCatalogItem,
     *,
@@ -297,25 +322,7 @@ def _score_item(
         if item.sku and style_id_matches_loose(sid, item.sku):
             score += 90
     if _has_category_intent(product_name):
-        pos, neg = infer_supply_category_hints(product_name)
-        for hint in pos:
-            h = hint.lower().replace("-", " ")
-            if h in blob or h.replace(" ", "-") in item.path.lower():
-                score += 25
-            if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag", "tote")):
-                score += 25
-            if hint == "wallet" and "wallet" in blob:
-                score += 25
-            if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
-                score += 20
-        for hint in neg:
-            if hint.lower() in blob:
-                score -= 40
-        if "eyewear" in blob and not any(
-            x in (product_name or "").lower()
-            for x in ("sunglass", "eyewear", "サングラス", "メガネ", "glasses")
-        ):
-            score -= 25
+        score += _category_intent_delta(blob, item.path, product_name)
     if brand and not _brand_matches(brand, item.brand, item.name, item.path):
         score -= 50
     if _PREOWNED_PATH.search(item.path):
