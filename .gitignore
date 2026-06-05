@@ -32,3 +32,6 @@ htmlcov/
 
 # Windows ショートカット（リポジトリ外の bat へのリンク等）
 *.lnk
+
+# Python build artifacts
+*.egg-info/
