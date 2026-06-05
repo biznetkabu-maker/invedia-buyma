@@ -80,6 +80,7 @@ class SourceCandidate:
         )
 
     def summary(self) -> str:
+        """候補1件の在庫・価格・利益を1行のコンソール表示にまとめる。"""
         if self.price:
             cur = self.currency or "?"
             price_str = f"{cur} {self.price:,.2f}"
@@ -112,6 +113,7 @@ class BestSourceResult:
 
     @property
     def in_stock_count(self) -> int:
+        """在庫ありと判定された候補の件数。"""
         return sum(1 for c in self.all_candidates if c.stock_status == "in_stock")
 
     @property
@@ -123,6 +125,7 @@ class BestSourceResult:
         return min(avail, key=lambda c: c.price or float("inf"))
 
     def summary(self) -> str:
+        """候補比較の選定理由と各候補の概要を複数行で返す。"""
         lines = [
             f"比較結果: {len(self.all_candidates)}件中 在庫あり{self.in_stock_count}件",
             f"選定理由: {self.reason}",
@@ -446,6 +449,7 @@ class PriceVote:
 
     @property
     def domain(self) -> str:
+        """URL のホスト名（取得できなければサイト名）を返す。"""
         from urllib.parse import urlparse
         return urlparse(self.url).hostname or self.source_site
 
@@ -463,13 +467,16 @@ class PriceConsensus:
 
     @property
     def vote_count(self) -> int:
+        """合意形成に参加した有効票数。"""
         return len(self.votes)
 
     @property
     def outlier_count(self) -> int:
+        """外れ値として除外された票数。"""
         return len(self.outliers)
 
     def summary(self) -> str:
+        """合意価格・信頼度・票数を1行に整形して返す。"""
         return (
             f"P3: {self.currency} {self.consensus_price:,.2f} "
             f"(信頼度 {self.confidence:.0%}, {self.vote_count}票, "

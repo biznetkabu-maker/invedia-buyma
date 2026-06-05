@@ -204,9 +204,11 @@ class PurchaseScore:
 
     @property
     def is_recommended(self) -> bool:
+        """グレード A / B （仕入れ推奨）かどうか。"""
         return self.grade in ("A", "B")
 
     def summary(self) -> str:
+        """評価結果全体（スコア・内訳・課題・提案）をコンソール用文字列に整形する。"""
         lines = [
             f"{'='*60}",
             f"  商品: {self.product_name} ({self.brand})",
