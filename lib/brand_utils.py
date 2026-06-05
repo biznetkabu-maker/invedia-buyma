@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from lib.style_id_utils import is_plausible_model_code
+
 _BRACKET_TAG = re.compile(r"【[^】]*】|\[[^\]]*\]")
 _DECORATIVE_CHARS = re.compile(r"[♪★☆♥♡♫♬♩♭♯]+")
 
@@ -75,8 +77,6 @@ def is_marketplace_brand_noise(brand: str) -> bool:
 
 def normalize_brand_name(brand: str) -> str:
     """【VIPセール】PRADA / ♪直営アウトレット♪PRADA / プラダ☆キルティング 等を正規化。"""
-    from lib.supply_search_utils import is_plausible_model_code
-
     tag_brand = _brand_from_bracket_tags(brand or "")
     if tag_brand and not is_plausible_model_code(tag_brand):
         return tag_brand

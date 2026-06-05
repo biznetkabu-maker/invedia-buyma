@@ -12,6 +12,24 @@ from typing import Optional
 # 正規化後に空になる文字だけのコードは無視
 _MIN_NORMALIZED_LEN = 3
 
+_NUMERIC_ONLY = re.compile(r"^\d{7,}$")
+_VOLUME_OR_SIZE = re.compile(
+    r"^\d+\s*(?:ml|mL|l|oz|g|kg|mm|cm)$|^\d+ml$|^\d+l$",
+    re.I,
+)
+
+
+def is_plausible_model_code(code: str) -> bool:
+    """仕入先検索の型番照合に使えるコードか（0ml / 100ml 等は除外）。"""
+    c = (code or "").strip()
+    if len(c) < 5:
+        return False
+    if _NUMERIC_ONLY.match(c) or _VOLUME_OR_SIZE.match(c):
+        return False
+    if not re.search(r"[A-Za-z]", c) or not re.search(r"\d", c):
+        return False
+    return True
+
 
 def normalize_style_id(value: Optional[str]) -> str:
     """比較用に Style ID 文字列を正規化する。

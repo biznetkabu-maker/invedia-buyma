@@ -20,15 +20,11 @@ from lib.brand_utils import (  # noqa: F401  -- re-export
     resolve_merchandise_brand,
     url_matches_brand,
 )
+from lib.style_id_utils import is_plausible_model_code  # noqa: F401  -- re-export
 
 _BRACKET_TAG = re.compile(r"【[^】]*】|\[[^\]]*\]")
 _DECORATIVE_CHARS = re.compile(r"[♪★☆♥♡♫♬♩♭♯]+")
 _MODEL_CODE = re.compile(r"\b([A-Z0-9][A-Z0-9-]{3,})\b", re.I)
-_NUMERIC_ONLY = re.compile(r"^\d{7,}$")
-_VOLUME_OR_SIZE = re.compile(
-    r"^\d+\s*(?:ml|mL|l|oz|g|kg|mm|cm)$|^\d+ml$|^\d+l$",
-    re.I,
-)
 
 _BRAND_JA_ALIASES: dict[str, str] = {
     "プラダ": "PRADA",
@@ -111,18 +107,6 @@ def clean_product_name_for_search(product_name: str, brand: str = "") -> str:
         s = " ".join(tokens)
 
     return dedupe_product_phrase(re.sub(r"\s+", " ", s).strip())
-
-
-def is_plausible_model_code(code: str) -> bool:
-    """仕入先検索・型番照合に使えるコードか（50ml / 100ml 等は除外）。"""
-    c = (code or "").strip()
-    if len(c) < 5:
-        return False
-    if _NUMERIC_ONLY.match(c) or _VOLUME_OR_SIZE.match(c):
-        return False
-    if not re.search(r"[A-Za-z]", c) or not re.search(r"\d", c):
-        return False
-    return True
 
 
 def compress_style_id_for_search(style_id: str, *, max_len: int = 10) -> str:
