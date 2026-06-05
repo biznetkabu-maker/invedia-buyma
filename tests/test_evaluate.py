@@ -8,13 +8,7 @@ from __future__ import annotations
 
 import csv
 import os
-import sys
-import tempfile
-from io import StringIO
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from lib.evaluate import (
     _export_csv,
@@ -23,7 +17,6 @@ from lib.evaluate import (
     main,
 )
 from lib.purchase_evaluator import EvaluationInput, PurchaseEvaluator, PurchaseScore
-
 
 # ── _record_to_input テスト ──────────────────────────────────────────────
 
@@ -243,3 +236,105 @@ class TestMain:
                 MockConfig.from_env.return_value = mock_cfg
                 ret = main()
         assert ret == 1
+
+    def test_sheet_success_path(self):
+        with patch("sys.argv", ["evaluate.py", "--sheet"]), \
+             patch("lib.evaluate.Config") as MockConfig, \
+             patch("lib.evaluate.sheet_mode", return_value=[]) as mock_sheet:
+            mock_cfg = MagicMock()
+            mock_cfg.validate.return_value = []
+            MockConfig.from_env.return_value = mock_cfg
+            ret = main()
+        assert ret == 0
+        mock_sheet.assert_called_once()
+
+    def test_default_runs_interactive(self):
+        fake_score = MagicMock()
+        fake_score.summary.return_value = "SUMMARY"
+        with patch("sys.argv", ["evaluate.py"]), \
+             patch("lib.evaluate.interactive_mode", return_value=fake_score) as mock_int:
+            ret = main()
+        assert ret == 0
+        mock_int.assert_called_once()
+
+
+# ── _prompt / _prompt_bool テスト ─────────────────────────────────────────
+
+
+class TestPrompt:
+    def test_returns_default_on_empty(self):
+        from lib.evaluate import _prompt
+        with patch("builtins.input", return_value=""):
+            assert _prompt("label", default=5, type_fn=int) == 5
+
+    def test_parses_typed_value(self):
+        from lib.evaluate import _prompt
+        with patch("builtins.input", return_value="42"):
+            assert _prompt("label", type_fn=int) == 42
+
+    def test_reprompts_on_invalid_then_valid(self):
+        from lib.evaluate import _prompt
+        with patch("builtins.input", side_effect=["bad", "3.5"]):
+            assert _prompt("label", type_fn=float) == 3.5
+
+    def test_reprompts_when_required_empty(self):
+        from lib.evaluate import _prompt
+        with patch("builtins.input", side_effect=["", "ok"]):
+            assert _prompt("label") == "ok"
+
+    def test_rejects_value_not_in_choices(self):
+        from lib.evaluate import _prompt
+        with patch("builtins.input", side_effect=["EUR", "USD"]):
+            assert _prompt("cur", choices=["USD", "JPY"]) == "USD"
+
+    def test_prompt_bool_default_and_yes(self):
+        from lib.evaluate import _prompt_bool
+        with patch("builtins.input", return_value=""):
+            assert _prompt_bool("q", default=True) is True
+        with patch("builtins.input", return_value="y"):
+            assert _prompt_bool("q") is True
+        with patch("builtins.input", return_value="n"):
+            assert _prompt_bool("q", default=True) is False
+
+
+# ── interactive_mode / sheet_mode テスト ──────────────────────────────────
+
+
+class TestInteractiveMode:
+    def test_interactive_mode_runs(self):
+        from lib.evaluate import interactive_mode
+        # interactive_mode で求められる入力を順に供給（数値は型に合わせる）
+        answers = iter([
+            "テスト商品", "GUCCI", "2024", "https://ex.com", "800", "USD", "155",
+            "180000", "0",            # 基本情報
+            "3", "7", "y", "excellent",  # 物流
+            "",                        # buyma_rank (Enter→None)
+            "n", "n", "n", "0", "n",  # 市場需要
+            "authorized", "y",        # リスク
+            "0.10", "2000", "0.077", "0.03", "0.15",  # 計算パラメータ
+        ])
+        with patch("builtins.input", lambda *a, **k: next(answers)):
+            score = interactive_mode()
+        assert hasattr(score, "grade")
+
+
+class TestSheetMode:
+    def test_sheet_mode_evaluates_and_skips(self):
+        from lib.evaluate import sheet_mode
+        good = _FakeRecord(name="良品")
+        bad = _FakeRecord(name="不良", price="0")
+        manager = MagicMock()
+        manager.get_all_records.return_value = [good, bad]
+        with patch("lib.evaluate.SheetManager", return_value=manager):
+            scores = sheet_mode(_FakeConfig())
+        assert len(scores) == 1
+        assert scores[0].product_name == "良品"
+
+    def test_sheet_mode_writes_csv(self, tmp_path):
+        from lib.evaluate import sheet_mode
+        manager = MagicMock()
+        manager.get_all_records.return_value = [_FakeRecord(name="良品")]
+        csv_path = str(tmp_path / "out.csv")
+        with patch("lib.evaluate.SheetManager", return_value=manager):
+            sheet_mode(_FakeConfig(), csv_path=csv_path)
+        assert os.path.exists(csv_path)
