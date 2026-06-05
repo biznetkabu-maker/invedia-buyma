@@ -60,6 +60,9 @@ from lib.intake_cli import (
     ask_yn as _ask_yn,
 )
 from lib.intake_cli import (
+    cli_print,
+)
+from lib.intake_cli import (
     print_header as _print_header,
 )
 from lib.intake_cli import (
@@ -118,7 +121,7 @@ def interactive_intake() -> None:
     # ════════════════════════════════════════════════════════════
     _print_step(2, "BUYMA 需要確認（自動）")
     demand = _run_demand_check(brand, product_name)
-    print(demand.summary())
+    cli_print(demand.summary())
 
     buyma_price = _resolve_buyma_price_from_demand(
         demand, manual_jpy=buyma_manual, use_auto=buyma_auto
@@ -167,9 +170,9 @@ def interactive_intake() -> None:
     _print_step(6, "スプレッドシートへ追加")
 
     if score.grade in ("D", "E"):
-        print(f"  ⚠️  グレード {score.grade} — 追加を推奨しません。")
+        cli_print(f"  ⚠️  グレード {score.grade} — 追加を推奨しません。")
         if not _ask_yn("  それでも追加しますか？", default=False):
-            print("  キャンセルしました。")
+            cli_print("  キャンセルしました。")
             return
 
     record = _build_record(
@@ -188,21 +191,21 @@ def interactive_intake() -> None:
 
 def batch_intake(csv_path: str) -> None:
     """CSV ファイルから商品を一括評価する（スクレイプなし・高速）。"""
-    print(f"\n  バッチ評価モード: {csv_path}")
+    cli_print(f"\n  バッチ評価モード: {csv_path}")
     try:
         with open(csv_path, encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
     except FileNotFoundError:
-        print(f"  ❌ ファイルが見つかりません: {csv_path}")
+        cli_print(f"  ❌ ファイルが見つかりません: {csv_path}")
         sys.exit(1)
 
-    print(f"  {len(rows)} 件を評価します...\n")
+    cli_print(f"  {len(rows)} 件を評価します...\n")
 
     for i, row in enumerate(rows, 1):
         brand        = row.get("brand", "").strip()
         product_name = row.get("product_name", "").strip()
         if not brand or not product_name:
-            print(f"  [{i:3}] ⚠️  スキップ（ブランドまたは商品名が空）")
+            cli_print(f"  [{i:3}] ⚠️  スキップ（ブランドまたは商品名が空）")
             continue
 
         buyma_price   = float(row.get("buyma_price", 0) or 0)
@@ -222,12 +225,12 @@ def batch_intake(csv_path: str) -> None:
         rec_c    = "📦" if _is_stable_category(product_name, category) else "  "
         rate_str = f"{score.effective_profit_rate:.1%}" if score.effective_profit_rate else "  N/A"
 
-        print(
+        cli_print(
             f"  [{i:3}] {icon}{rec_b}{rec_c} [{score.grade}]  "
             f"{brand} {product_name[:28]:<28}  利益率 {rate_str}"
         )
 
-    print("\n  ヒント: A/B グレードの商品を python3 intake.py で1件ずつ登録してください。")
+    cli_print("\n  ヒント: A/B グレードの商品を python3 intake.py で1件ずつ登録してください。")
 
 
 
@@ -271,18 +274,18 @@ def _check_auto_intake_features() -> None:
     ):
         missing.append("FARFETCH domcontentloaded（engine.py 古い）")
     if missing:
-        print("  ⚠️  古い intake.py です。次を実行してください:")
-        print("      git fetch origin cursor/buyma-style-id-supply-f043")
-        print("      git checkout cursor/buyma-style-id-supply-f043")
-        print("      git pull origin cursor/buyma-style-id-supply-f043")
-        print("      py scripts\\verify_intake_version.py")
-        print(f"      不足: {', '.join(missing)}")
+        cli_print("  ⚠️  古い intake.py です。次を実行してください:")
+        cli_print("      git fetch origin cursor/buyma-style-id-supply-f043")
+        cli_print("      git checkout cursor/buyma-style-id-supply-f043")
+        cli_print("      git pull origin cursor/buyma-style-id-supply-f043")
+        cli_print("      py scripts\\verify_intake_version.py")
+        cli_print(f"      不足: {', '.join(missing)}")
         sys.exit(1)
     try:
         import lib.intake_funnel  # noqa: F401
     except ImportError:
         missing.append("intake_funnel")
-    print(
+    cli_print(
         "  [intake 自動 v7] 漏斗モード・型番site検索・"
         "自動見送り・候補URLs優先"
     )
@@ -309,9 +312,9 @@ def _open_sheet_manager() -> Optional[SheetManager]:
         config = Config.from_env()
         errors = config.validate()
         if errors:
-            print("  ❌ シート設定が未完了です:")
+            cli_print("  ❌ シート設定が未完了です:")
             for e in errors:
-                print(f"       - {e}")
+                cli_print(f"       - {e}")
             return None
         manager = SheetManager(
             spreadsheet_id=config.spreadsheet_id,
@@ -321,17 +324,17 @@ def _open_sheet_manager() -> Optional[SheetManager]:
         manager.ensure_header()
         return manager
     except Exception as e:
-        print("  ❌ シート接続失敗:")
+        cli_print("  ❌ シート接続失敗:")
         for line in str(e).splitlines():
-            print(f"     {line}")
+            cli_print(f"     {line}")
         try:
             titles = SheetManager(
                 spreadsheet_id=config.spreadsheet_id,
                 worksheet_name=config.worksheet_name,
                 credentials_path=config.credentials_path,
             ).list_worksheet_titles()
-            print(f"     現在の設定タブ名: {config.worksheet_name}")
-            print(f"     利用可能なタブ: {', '.join(titles)}")
+            cli_print(f"     現在の設定タブ名: {config.worksheet_name}")
+            cli_print(f"     利用可能なタブ: {', '.join(titles)}")
         except Exception:
             logger.debug("ワークシートタブ一覧取得失敗", exc_info=True)
         return None
@@ -352,7 +355,7 @@ def _price_factor() -> float:
 def _ask_buyma_price_mode() -> tuple[float, bool]:
     """(手入力価格, 自動フラグ)。自動時は Step2 後に競合最安×係数で決定。"""
     factor = _price_factor()
-    print(f"  ※ Enter / auto → Step2 後に競合最安値 × {factor} で自動設定")
+    cli_print(f"  ※ Enter / auto → Step2 後に競合最安値 × {factor} で自動設定")
     while True:
         raw = input("  BUYMA予定販売価格（JPY）[auto]: ").strip()
         if not raw or raw.lower() in ("auto", "a", "自動"):
@@ -360,7 +363,7 @@ def _ask_buyma_price_mode() -> tuple[float, bool]:
         try:
             return float(raw.replace(",", "")), False
         except ValueError:
-            print("    ⚠️  数値を入力するか、auto と入力してください。")
+            cli_print("    ⚠️  数値を入力するか、auto と入力してください。")
 
 
 def _resolve_buyma_price_from_demand(
@@ -377,12 +380,12 @@ def _resolve_buyma_price_from_demand(
 
     if demand.min_price:
         suggested = int(round(demand.min_price * factor))
-        print(
+        cli_print(
             f"\n  売価案: 競合最安 ¥{demand.min_price:,} × {factor} "
             f"= ¥{suggested:,}"
         )
         if use_auto:
-            print("  → 自動でこの売価を使用します。")
+            cli_print("  → 自動でこの売価を使用します。")
             return float(suggested)
         if _ask_yn("  この売価で進めますか？", default=True):
             return float(suggested)
@@ -390,7 +393,7 @@ def _resolve_buyma_price_from_demand(
     if manual_jpy > 0:
         return manual_jpy
 
-    print("  ⚠️  競合最安が取得できませんでした。売価を手入力してください。")
+    cli_print("  ⚠️  競合最安が取得できませんでした。売価を手入力してください。")
     return _ask_float("BUYMA予定販売価格（JPY）", default=0.0)
 
 
@@ -399,11 +402,11 @@ def _get_exchange_rate(currency: str) -> float:
     try:
         rate = get_rate(currency, "JPY")
         if rate:
-            print(f"  → 現在の {currency}/JPY: {rate:.2f}（自動取得）")
+            cli_print(f"  → 現在の {currency}/JPY: {rate:.2f}（自動取得）")
             raw = input(f"  為替レート（Enter でそのまま使用）[{round(rate, 2)}]: ").strip()
             return float(raw) if raw else round(rate, 2)
     except Exception as e:
-        print(f"  ⚠️  為替自動取得失敗: {e}")
+        cli_print(f"  ⚠️  為替自動取得失敗: {e}")
     return _ask_float("為替レート（手動入力）", default=155.0)
 
 
@@ -415,14 +418,14 @@ def _run_demand_check(
 ) -> BUYMADemandSignal:
     """BUYMA 需要確認を実行する。失敗時はゼロ値シグナルを返す。"""
     label = display_name or f"{brand} {product_name}"
-    print(f"  BUYMAで「{label}」を確認中... ", end="", flush=True)
+    cli_print(f"  BUYMAで「{label}」を確認中... ", end="", flush=True)
     try:
         scraper = BUYMADemandScraper(headless=True, page_wait_ms=3000)
         signal = scraper.get_demand(brand, product_name)
-        print("完了")
+        cli_print("完了")
         return signal
     except Exception as e:
-        print(f"スキップ（{e}）")
+        cli_print(f"スキップ（{e}）")
         return BUYMADemandSignal(
             brand=brand, product_name=product_name,
             favorites_count=0, listing_count=0,
@@ -435,12 +438,12 @@ def _run_demand_check(
 def _collect_source_urls(brand: str, product_name: str) -> list[str]:
     """検索URLを表示し、ユーザーから商品URLを収集する。"""
     url_set = build_search_urls(brand, product_name)
-    print(url_set.display())
+    cli_print(url_set.display())
 
-    print("  上記URLをブラウザで開き、商品ページのURLを貼り付けてください。")
-    print("  複数サイトで見つけた場合は全て入力（カンマ区切り）。")
-    print("  → システムが並列スクレイプして最安値・在庫ありを自動選択します。")
-    print("  → 1件だけでも可能です。\n")
+    cli_print("  上記URLをブラウザで開き、商品ページのURLを貼り付けてください。")
+    cli_print("  複数サイトで見つけた場合は全て入力（カンマ区切り）。")
+    cli_print("  → システムが並列スクレイプして最安値・在庫ありを自動選択します。")
+    cli_print("  → 1件だけでも可能です。\n")
 
     raw = input("  商品URL（なければEnterでスキップ）: ").strip()
     if not raw:
@@ -449,13 +452,13 @@ def _collect_source_urls(brand: str, product_name: str) -> list[str]:
     urls = [u.strip() for u in raw.split(",") if u.strip().startswith("http")]
     invalid = [u.strip() for u in raw.split(",") if u.strip() and not u.strip().startswith("http")]
     if invalid:
-        print(f"  ⚠️  無効なURL（httpで始まらない）をスキップ: {invalid}")
+        cli_print(f"  ⚠️  無効なURL（httpで始まらない）をスキップ: {invalid}")
     return urls
 
 
 def _collect_buyma_style_id() -> str:
     """型番を手入力するか、BUYMA商品URLから自動取得する。"""
-    print("  型番（Style ID / SKU）を入力すると、仕入先ページの ID と照合して別商品を弾きます。")
+    cli_print("  型番（Style ID / SKU）を入力すると、仕入先ページの ID と照合して別商品を弾きます。")
     style_id = input("  型番 [Enterでスキップ]: ").strip()
     if style_id:
         return style_id
@@ -467,20 +470,20 @@ def _collect_buyma_style_id() -> str:
         return ""
 
     if not buyma_url.startswith("http"):
-        print("  ⚠️  URLの形式ではありません。型番なしで続行します。")
+        cli_print("  ⚠️  URLの形式ではありません。型番なしで続行します。")
         return ""
 
     try:
         from lib.buyma_style_id import fetch_buyma_style_id_from_url_sync
 
-        print("  BUYMAページから型番を取得中（10〜30秒）...")
+        cli_print("  BUYMAページから型番を取得中（10〜30秒）...")
         fetched = fetch_buyma_style_id_from_url_sync(buyma_url)
         if fetched:
-            print(f"  → 取得した型番: {fetched}")
+            cli_print(f"  → 取得した型番: {fetched}")
             return fetched
-        print("  ⚠️  型番を取得できませんでした。手動入力かシート追記で対応してください。")
+        cli_print("  ⚠️  型番を取得できませんでした。手動入力かシート追記で対応してください。")
     except Exception as e:
-        print(f"  ⚠️  型番取得エラー: {e}")
+        cli_print(f"  ⚠️  型番取得エラー: {e}")
     return ""
 
 
@@ -492,7 +495,7 @@ def _print_style_id_report(result: "BestSourceResult", buyma_style_id: str) -> N
     from lib.style_id_utils import scraped_matches_buyma_style
 
     ref = buyma_style_id.strip()
-    print(f"\n  【型番照合】 BUYMA側: {ref}")
+    cli_print(f"\n  【型番照合】 BUYMA側: {ref}")
     for c in result.all_candidates:
         sid = c.style_id or "（未取得）"
         if scraped_matches_buyma_style(c.style_id, ref):
@@ -501,8 +504,8 @@ def _print_style_id_report(result: "BestSourceResult", buyma_style_id: str) -> N
             mark = "❌ 不一致（選定対象外）"
         else:
             mark = "❓ 仕入先ID未取得（選定対象外）"
-        print(f"    {mark}  {c.url[:58]}")
-        print(f"           style_id={sid}")
+        cli_print(f"    {mark}  {c.url[:58]}")
+        cli_print(f"           style_id={sid}")
 
 
 def _scrape_and_select(
@@ -534,9 +537,9 @@ def _scrape_and_select(
     )
     if rejected:
         for u in rejected:
-            print(f"  ⚠️  不正な仕入先URLを除外: {u[:85]}")
+            cli_print(f"  ⚠️  不正な仕入先URLを除外: {u[:85]}")
         if not valid_urls:
-            print(
+            cli_print(
                 "  ❌ スクレイプ可能な URL がありません。"
                 " 「最新_仕入れ自動化を取得.bat」実行後に再試行するか、"
                 "手動で py intake.py に新品 URL を貼ってください。"
@@ -554,10 +557,10 @@ def _scrape_and_select(
             exchange_rate=exchange_rate,
             buyma_style_id=buyma_style_id or None,
         )
-        print(f"\n  {result.summary()}")
+        cli_print(f"\n  {result.summary()}")
         _print_style_id_report(result, buyma_style_id)
         if result.match_score:
-            print(result.match_score.format_console())
+            cli_print(result.match_score.format_console())
 
         if result.best:
             b = result.best
@@ -574,7 +577,7 @@ def _scrape_and_select(
         )
 
     except Exception as e:
-        print(f"  ❌ スクレイプエラー: {e}")
+        cli_print(f"  ❌ スクレイプエラー: {e}")
         return (
             "",
             0.0,
@@ -596,7 +599,7 @@ def _select_fallback_candidate(
 
     style_ref = (buyma_style_id or "").strip()
     if style_ref and "型番「" in result.reason:
-        print(
+        cli_print(
             "  ⚠️  型番が一致する仕入先が無いため、"
             "誤った商品の価格フォールバックは行いません。"
         )
@@ -606,10 +609,10 @@ def _select_fallback_candidate(
         if not c.price:
             continue
         if style_ref and not scraped_matches_buyma_style(c.style_id, style_ref):
-            print(f"  ⚠️  型番不一致のため除外: style_id={c.style_id or '未取得'}")
+            cli_print(f"  ⚠️  型番不一致のため除外: style_id={c.style_id or '未取得'}")
             continue
         if c.profit is not None and c.profit <= 0:
-            print(
+            cli_print(
                 f"  ⚠️  利益がマイナスの候補は除外: "
                 f"{c.currency} {c.price:,.0f} 利益¥{c.profit:,.0f}"
             )
@@ -618,12 +621,12 @@ def _select_fallback_candidate(
             c.price, c.currency, c.url, buyma_price, exchange_rate,
             raw_price="",
         ):
-            print(
+            cli_print(
                 f"  ⚠️  価格が妥当範囲外のため除外: "
                 f"{c.currency} {c.price:,.0f} ({c.url[:70]}...)"
             )
             continue
-        print(f"  → 在庫なしですが価格取得済みの候補を使用: {c.url[:85]}")
+        cli_print(f"  → 在庫なしですが価格取得済みの候補を使用: {c.url[:85]}")
         return (c.url, c.price, result.match_score, c.style_id or "", c.stock_status)
 
     return "", 0.0, result.match_score, "", "unknown"
@@ -711,10 +714,10 @@ def _write_to_sheet(record: ProductRecord) -> None:
         config = Config.from_env()
         errors = config.validate()
         if errors:
-            print("  ⚠️  シート設定が未完了のため書き込みをスキップします。")
-            print(f"     商品情報: {record.商品名}")
+            cli_print("  ⚠️  シート設定が未完了のため書き込みをスキップします。")
+            cli_print(f"     商品情報: {record.商品名}")
             for e in errors:
-                print(f"       - {e}")
+                cli_print(f"       - {e}")
             return
 
         manager = SheetManager(
@@ -725,16 +728,16 @@ def _write_to_sheet(record: ProductRecord) -> None:
         manager.ensure_header()
         action = manager.upsert_record(record)
         verb = "追加" if action == "appended" else "更新"
-        print(f"  ✅ シートに{verb}しました: {record.商品名}")
+        cli_print(f"  ✅ シートに{verb}しました: {record.商品名}")
 
     except Exception as e:
-        print(f"  ❌ シートへの書き込み失敗: {e}")
-        print("  商品情報（手動でシートに追加してください）:")
+        cli_print(f"  ❌ シートへの書き込み失敗: {e}")
+        cli_print("  商品情報（手動でシートに追加してください）:")
         for col, val in zip(["商品名", "ブランド", "型番", "仕入れURL", "現地価格",
                               "為替", "BUYMA販売価格", "在庫ステータス", "利益額"],
                              record.to_row()):
             if val:
-                print(f"    {col}: {val}")
+                cli_print(f"    {col}: {val}")
 
 
 def _write_to_sheet_quiet(record: ProductRecord) -> bool:
@@ -744,7 +747,7 @@ def _write_to_sheet_quiet(record: ProductRecord) -> bool:
         config = Config.from_env()
         errors = config.validate()
         if errors:
-            print("  ⚠️  シート設定が未完了のため書き込みをスキップします。")
+            cli_print("  ⚠️  シート設定が未完了のため書き込みをスキップします。")
             return False
         manager = SheetManager(
             spreadsheet_id=config.spreadsheet_id,
@@ -754,10 +757,10 @@ def _write_to_sheet_quiet(record: ProductRecord) -> bool:
         manager.ensure_header()
         action = manager.upsert_record(record)
         verb = "追加" if action == "appended" else "更新"
-        print(f"  ✅ シートに{verb}しました: {record.商品名}")
+        cli_print(f"  ✅ シートに{verb}しました: {record.商品名}")
         return True
     except Exception as e:
-        print(f"  ❌ シートへの書き込み失敗: {e}")
+        cli_print(f"  ❌ シートへの書き込み失敗: {e}")
         return False
 
 

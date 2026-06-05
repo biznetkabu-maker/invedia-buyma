@@ -24,6 +24,7 @@ import sys
 from typing import Optional
 
 from lib.config import Config
+from lib.intake_cli import cli_print
 from lib.purchase_evaluator import EvaluationInput, PurchaseEvaluator, PurchaseScore
 from lib.sheet_manager import ProductRecord, SheetManager
 
@@ -38,16 +39,16 @@ def _prompt(label: str, default=None, type_fn=str, choices: list | None = None):
         if not raw and default is not None:
             return default
         if not raw:
-            print("    ⚠️  必須項目です。")
+            cli_print("    ⚠️  必須項目です。")
             continue
         try:
             val = type_fn(raw)
             if choices and val not in choices:
-                print(f"    ⚠️  {choices} から選択してください。")
+                cli_print(f"    ⚠️  {choices} から選択してください。")
                 continue
             return val
         except (ValueError, TypeError):
-            print("    ⚠️  入力形式が正しくありません。")
+            cli_print("    ⚠️  入力形式が正しくありません。")
 
 
 def _prompt_bool(label: str, default: bool = False) -> bool:
@@ -60,12 +61,12 @@ def _prompt_bool(label: str, default: bool = False) -> bool:
 
 def interactive_mode() -> PurchaseScore:
     """対話モードで入力を受け付けて評価する。"""
-    print("\n" + "=" * 60)
-    print("  BUYMA 仕入れ判断シミュレーター — 対話モード")
-    print("=" * 60)
-    print("  各項目を入力してください（[] 内はデフォルト値）\n")
+    cli_print("\n" + "=" * 60)
+    cli_print("  BUYMA 仕入れ判断シミュレーター — 対話モード")
+    cli_print("=" * 60)
+    cli_print("  各項目を入力してください（[] 内はデフォルト値）\n")
 
-    print("── 基本情報 ─────────────────────────────────")
+    cli_print("── 基本情報 ─────────────────────────────────")
     product_name   = _prompt("商品名")
     brand          = _prompt("ブランド名")
     model_year     = _prompt("モデル年（例: 2024）", 2025, int)
@@ -76,13 +77,13 @@ def interactive_mode() -> PurchaseScore:
     buyma_price    = _prompt("BUYMA予定販売価格（JPY）", type_fn=float)
     japan_retail   = _prompt("日本公式定価（JPY、不明は 0）", 0, float)
 
-    print("\n── 物流情報 ─────────────────────────────────")
+    cli_print("\n── 物流情報 ─────────────────────────────────")
     dispatch_days       = _prompt("注文から現地発送までの日数", 3, int)
     japan_arrival_days  = _prompt("現地発送から日本着までの日数", 7, int)
     is_realtime_stock   = _prompt_bool("在庫はリアルタイム表示か", True)
     packaging_quality   = _prompt("梱包品質", "excellent", choices=["excellent", "good", "unknown"])
 
-    print("\n── 市場需要 ─────────────────────────────────")
+    cli_print("\n── 市場需要 ─────────────────────────────────")
     buyma_rank_str = input("  BUYMAランキング順位（不明は Enter）: ").strip()
     buyma_rank: Optional[int] = int(buyma_rank_str) if buyma_rank_str else None
     sns_trending        = _prompt_bool("SNSでトレンド中か", False)
@@ -91,14 +92,14 @@ def interactive_mode() -> PurchaseScore:
     favorites_count     = _prompt("直近1週間のお気に入り登録数", 0, int)
     has_cart_addition   = _prompt_bool("カート投入（購入意思）があるか", False)
 
-    print("\n── リスク管理 ───────────────────────────────")
+    cli_print("\n── リスク管理 ───────────────────────────────")
     source_type   = _prompt(
         "仕入れ先種別", "authorized",
         choices=["official", "authorized", "select", "unknown"]
     )
     is_volume_zone = _prompt_bool("日本ボリュームゾーン（Mサイズ・定番色）か", True)
 
-    print("\n── 計算パラメータ（任意、Enter でデフォルト使用）──")
+    cli_print("\n── 計算パラメータ（任意、Enter でデフォルト使用）──")
     customs_rate        = _prompt("関税率（例: 0.10）", 0.10, float)
     shipping_cost_jpy   = _prompt("国際送料固定（JPY）", 2000.0, float)
     buyma_fee_rate      = _prompt("BUYMA手数料率（例: 0.077）", 0.077, float)
@@ -182,14 +183,14 @@ def _record_to_input(record: ProductRecord, config: Config) -> Optional[Evaluati
 
 def sheet_mode(config: Config, csv_path: str = "") -> list[PurchaseScore]:
     """スプレッドシートから全商品を読み込んで一括評価する。"""
-    print("\n  スプレッドシートから商品を読み込み中...")
+    cli_print("\n  スプレッドシートから商品を読み込み中...")
     manager = SheetManager(
         spreadsheet_id=config.spreadsheet_id,
         worksheet_name=config.worksheet_name,
         credentials_path=config.credentials_path,
     )
     records = manager.get_all_records()
-    print(f"  {len(records)} 件の商品を読み込みました。\n")
+    cli_print(f"  {len(records)} 件の商品を読み込みました。\n")
 
     evaluator = PurchaseEvaluator()
     scores: list[PurchaseScore] = []
@@ -197,12 +198,12 @@ def sheet_mode(config: Config, csv_path: str = "") -> list[PurchaseScore]:
     for record in records:
         inp = _record_to_input(record, config)
         if inp is None:
-            print(f"  ⚠️  スキップ: {record.商品名}（価格データ不足）")
+            cli_print(f"  ⚠️  スキップ: {record.商品名}（価格データ不足）")
             continue
         score = evaluator.evaluate(inp)
         scores.append(score)
         grade_icon = {"A": "🟢", "B": "🟡", "C": "🟠", "D": "🔴", "E": "⛔"}.get(score.grade, "❓")
-        print(
+        cli_print(
             f"  {grade_icon} [{score.grade}] {score.product_name:<25}"
             f" | スコア {score.overall_score:5.1f}"
             f" | 実質利益率 {score.effective_profit_rate:5.1%}"
@@ -210,7 +211,7 @@ def sheet_mode(config: Config, csv_path: str = "") -> list[PurchaseScore]:
 
     if csv_path:
         _export_csv(scores, csv_path)
-        print(f"\n  📄 CSV に書き出しました: {csv_path}")
+        cli_print(f"\n  📄 CSV に書き出しました: {csv_path}")
 
     return scores
 
@@ -268,12 +269,12 @@ def demo_mode() -> list[PurchaseScore]:
     evaluator = PurchaseEvaluator()
     scores = [evaluator.evaluate(s) for s in samples]
 
-    print("\n" + "=" * 60)
-    print("  BUYMA 仕入れ判断シミュレーター — デモ結果")
-    print("=" * 60)
+    cli_print("\n" + "=" * 60)
+    cli_print("  BUYMA 仕入れ判断シミュレーター — デモ結果")
+    cli_print("=" * 60)
     for score in scores:
-        print(score.summary())
-        print()
+        cli_print(score.summary())
+        cli_print()
 
     return scores
 
@@ -321,21 +322,21 @@ def main() -> int:
         errors = config.validate()
         if errors:
             for e in errors:
-                print(f"❌ 設定エラー: {e}")
+                cli_print(f"❌ 設定エラー: {e}")
             return 1
         scores = sheet_mode(config, csv_path=args.csv)
-        print(f"\n  評価完了: {len(scores)} 件")
+        cli_print(f"\n  評価完了: {len(scores)} 件")
         recommended = [s for s in scores if s.is_recommended]
-        print(f"  推奨（A/B）: {len(recommended)} 件")
+        cli_print(f"  推奨（A/B）: {len(recommended)} 件")
         if recommended:
-            print("\n  🟢 仕入れ推奨商品一覧:")
+            cli_print("\n  🟢 仕入れ推奨商品一覧:")
             for s in recommended:
-                print(f"    [{s.grade}] {s.product_name} — スコア {s.overall_score:.1f}")
+                cli_print(f"    [{s.grade}] {s.product_name} — スコア {s.overall_score:.1f}")
         return 0
 
     # デフォルト: 対話モード
     score = interactive_mode()
-    print("\n" + score.summary())
+    cli_print("\n" + score.summary())
     return 0
 
 

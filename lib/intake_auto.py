@@ -12,6 +12,9 @@ from typing import Optional
 from lib.buyma_demand import BUYMADemandSignal
 from lib.forex import get_rate
 from lib.intake_cli import (
+    cli_print,
+)
+from lib.intake_cli import (
     print_header as _print_header,
 )
 from lib.intake_cli import (
@@ -33,7 +36,7 @@ def auto_intake_from_buyma(
 
     _print_header()
     _check_auto_intake_features()
-    print("  【自動モード】 BUYMA URL から仕入先を探索します\n")
+    cli_print("  【自動モード】 BUYMA URL から仕入先を探索します\n")
     return _run_auto_intake(
         buyma_url=buyma_url, skip_low_grades=skip_low_grades,
     ).success
@@ -57,7 +60,7 @@ def auto_intake_from_sheet(
 
     _print_header()
     _check_auto_intake_features()
-    print("  【自動モード】 シートの BUYMA候補 行を処理します\n")
+    cli_print("  【自動モード】 シートの BUYMA候補 行を処理します\n")
     if use_funnel and funnel_enabled():
         print_funnel_banner()
 
@@ -77,22 +80,22 @@ def auto_intake_from_sheet(
         )
         for rec, verdict in pre_skipped:
             name = rec.商品名.strip()
-            print(f"  ⏭️  スキップ: {name[:50]} — {verdict.reason}")
+            cli_print(f"  ⏭️  スキップ: {name[:50]} — {verdict.reason}")
             if verdict.skip_status:
                 mark_auto_skip(manager, name, verdict.skip_status)
     else:
         targets = buyma_rows[:effective_limit] if effective_limit > 0 else buyma_rows
 
     if not targets:
-        print("  処理対象の BUYMA候補 行がありません。")
+        cli_print("  処理対象の BUYMA候補 行がありません。")
         return
 
-    print(f"  実行対象: {len(targets)} 件\n")
+    cli_print(f"  実行対象: {len(targets)} 件\n")
     ok = 0
     for i, rec in enumerate(targets, 1):
-        print(f"\n{'=' * 60}")
-        print(f"  [{i}/{len(targets)}] {rec.商品名 or rec.ブランド}")
-        print(f"{'=' * 60}")
+        cli_print(f"\n{'=' * 60}")
+        cli_print(f"  [{i}/{len(targets)}] {rec.商品名 or rec.ブランド}")
+        cli_print(f"{'=' * 60}")
 
         buyma_price_hint = 0.0
         if rec.BUYMA販売価格.strip():
@@ -121,7 +124,7 @@ def auto_intake_from_sheet(
         elif outcome.skip_status and manager:
             mark_auto_skip(manager, rec.商品名.strip(), outcome.skip_status)
 
-    print(f"\n  完了: {ok}/{len(targets)} 件をシートに反映しました。")
+    cli_print(f"\n  完了: {ok}/{len(targets)} 件をシートに反映しました。")
 
 
 def _product_name_without_brand(record: ProductRecord) -> str:
@@ -145,8 +148,8 @@ def _auto_fetch_buyma_info(buyma_url: str) -> Optional[object]:
     from lib.buyma_item_parser import fetch_buyma_item_info_sync
 
     _print_step(1, "BUYMA 商品情報の取得（自動）")
-    print(f"  URL: {buyma_url[:70]}")
-    print("  ページを取得中（10〜30秒）...")
+    cli_print(f"  URL: {buyma_url[:70]}")
+    cli_print("  ページを取得中（10〜30秒）...")
     return fetch_buyma_item_info_sync(buyma_url)
 
 
@@ -201,19 +204,19 @@ def _auto_extract_product_identity(
     )
     page_price_jpy = info.price_jpy
 
-    print(f"  ブランド: {brand or '（未取得）'}")
-    print(f"  商品名:   {product_name or '（未取得）'}")
+    cli_print(f"  ブランド: {brand or '（未取得）'}")
+    cli_print(f"  商品名:   {product_name or '（未取得）'}")
     if sheet_style_id:
-        print(f"  型番:     {sheet_style_id}")
+        cli_print(f"  型番:     {sheet_style_id}")
     elif variant.buyma_item_id:
-        print(f"  BUYMA ID: {variant.buyma_item_id}（参照用・照合には未使用）")
+        cli_print(f"  BUYMA ID: {variant.buyma_item_id}（参照用・照合には未使用）")
     elif buyma_style_id:
-        print(f"  BUYMA ID: {buyma_style_id}（参照用）")
+        cli_print(f"  BUYMA ID: {buyma_style_id}（参照用）")
     if page_price_jpy:
-        print(f"  BUYMA価格: ¥{page_price_jpy:,}")
+        cli_print(f"  BUYMA価格: ¥{page_price_jpy:,}")
 
     if not brand or not product_name:
-        print("  ❌ ブランドまたは商品名を取得できませんでした。")
+        cli_print("  ❌ ブランドまたは商品名を取得できませんでした。")
         return None
 
     return (
@@ -238,25 +241,25 @@ def _auto_check_prada_official(
     _print_step(1.5, "PRADA 公式カタログ照合（prada.com）")
     from lib.official_catalog.prada import lookup_prada_official_sync
 
-    print("  型番を公式 SKU と突合（F12/XHR・JSON-LD・DDG）...")
+    cli_print("  型番を公式 SKU と突合（F12/XHR・JSON-LD・DDG）...")
     official_match = lookup_prada_official_sync(
         supply_style_id,
         product_name=raw_product_name or product_name,
         use_playwright=True,
     )
     if official_match:
-        print(f"  公式SKU:  {official_match.sku}")
+        cli_print(f"  公式SKU:  {official_match.sku}")
         if official_match.english_name:
-            print(f"  英語名:   {official_match.english_name}")
+            cli_print(f"  英語名:   {official_match.english_name}")
         if official_match.product_url:
-            print(f"  公式URL:  {official_match.product_url[:75]}")
-        print(f"  ({official_match.identity_note})")
+            cli_print(f"  公式URL:  {official_match.product_url[:75]}")
+        cli_print(f"  ({official_match.identity_note})")
     else:
-        print(
+        cli_print(
             "  ⚠️  公式照合なし（ローカルで scripts/capture_prada_f12.py を実行可能）"
         )
         if is_eyewear_product_name(f"{brand} {product_name}"):
-            print(
+            cli_print(
                 "  → サングラスは探索が難しい場合があります。"
                 "失敗時は候補URLsに仕入URLを貼って再実行してください。"
             )
@@ -280,13 +283,13 @@ def _auto_search_supply_urls(
 
     class _Step3Log(list):
         def append(self, item: object) -> None:
-            print(item, flush=True)
+            cli_print(item, flush=True)
             super().append(str(item))
 
     search_log: _Step3Log = _Step3Log()
     if use_funnel:
-        print("  漏斗: 候補URLs → 型番site検索 → サイト内検索（最大数分）...", flush=True)
-        print("  （探索中… 型番検索の行が順に出ます。1〜3分かかることがあります）", flush=True)
+        cli_print("  漏斗: 候補URLs → 型番site検索 → サイト内検索（最大数分）...", flush=True)
+        cli_print("  （探索中… 型番検索の行が順に出ます。1〜3分かかることがあります）", flush=True)
         supply = discover_supply_urls_funnel(
             brand,
             product_name,
@@ -301,7 +304,7 @@ def _auto_search_supply_urls(
             log_lines=search_log,
         )
     else:
-        print("  主要5サイトの検索結果から商品ページ URL を収集中（1〜3分）...")
+        cli_print("  主要5サイトの検索結果から商品ページ URL を収集中（1〜3分）...")
         supply = discover_supply_urls_sync(
             brand, product_name, supply_style_id,
             raw_product_name=raw_product_name,
@@ -310,14 +313,14 @@ def _auto_search_supply_urls(
         )
     supply = [s for s in supply if _url_valid_supply(brand, s.product_url)]
     if not supply and search_log and any("OK FARFETCH" in ln for ln in search_log):
-        print(
+        cli_print(
             "  ⚠️  FARFETCH の URL は見つかりましたが形式が不正です。"
             " git pull 後に再実行するか、手動で新品 URL を貼ってください。"
         )
     candidate_urls = [s.product_url for s in supply]
     if supply and not search_log:
         for s in supply:
-            print(f"    {s.site_name}: {s.product_url[:65]}")
+            cli_print(f"    {s.site_name}: {s.product_url[:65]}")
     return candidate_urls
 
 
@@ -362,7 +365,7 @@ def _auto_evaluate_and_write(
     _print_score(score)
 
     if score.grade in ("D", "E") and skip_low_grades:
-        print(f"  ⚠️  グレード {score.grade} のためシート反映をスキップしました。")
+        cli_print(f"  ⚠️  グレード {score.grade} のためシート反映をスキップしました。")
         return AutoIntakeOutcome(False, SKIP_LOW_GRADE)
 
     match_style_id = style_id_for_matching(sheet_style_id, buyma_style_id)
@@ -378,7 +381,7 @@ def _auto_evaluate_and_write(
         purchase_grade=score.grade,
         official_sku=official_match.sku if official_match else "",
     )
-    print(match_score.format_console())
+    cli_print(match_score.format_console())
 
     _print_step(6, "スプレッドシートへ追加")
     record = _build_record(
@@ -438,13 +441,13 @@ def _run_auto_intake(
 
     buyma_url = buyma_url.strip()
     if not _is_buyma_reference_url(buyma_url):
-        print(f"  ❌ BUYMA 商品 URL ではありません: {buyma_url}")
+        cli_print(f"  ❌ BUYMA 商品 URL ではありません: {buyma_url}")
         return AutoIntakeOutcome(False, SKIP_NO_SUPPLY)
 
     # Step 1: BUYMA 商品情報取得
     info = _auto_fetch_buyma_info(buyma_url)
     if not info:
-        print("  ❌ BUYMA ページの取得に失敗しました。")
+        cli_print("  ❌ BUYMA ページの取得に失敗しました。")
         return AutoIntakeOutcome(False, SKIP_BUYMA_FETCH)
 
     # Step 1b: 商品情報の抽出
@@ -463,10 +466,10 @@ def _run_auto_intake(
     if is_non_apparel_product_name(f"{brand} {product_name}") or is_non_apparel_product_name(
         raw_product_name
     ):
-        print(
+        cli_print(
             "  ⏭️  香水・コスメは自動仕入れ検討の対象外です（バッグ・財布向けの探索のため）。"
         )
-        print("  → py intake.py で仕入先 URL を手動で貼ってください。")
+        cli_print("  → py intake.py で仕入先 URL を手動で貼ってください。")
         return AutoIntakeOutcome(False, SKIP_OUT_OF_SCOPE)
 
     # Step 1.5: PRADA 公式照合
@@ -481,14 +484,14 @@ def _run_auto_intake(
         product_name,
         display_name=f"{brand} {product_name}",
     )
-    print(demand.summary())
+    cli_print(demand.summary())
 
     buyma_price = _resolve_buyma_price_auto(demand, page_price_jpy)
     if buyma_price_hint > 0 and buyma_price <= 0:
         buyma_price = buyma_price_hint
-        print(f"  → シートの参考価格 ¥{int(buyma_price):,} を使用します。")
+        cli_print(f"  → シートの参考価格 ¥{int(buyma_price):,} を使用します。")
     if buyma_price <= 0:
-        print("  ❌ 売価を決定できませんでした。手動で intake.py を実行してください。")
+        cli_print("  ❌ 売価を決定できませんでした。手動で intake.py を実行してください。")
         return AutoIntakeOutcome(False, SKIP_NO_SELL_PRICE)
 
     # Step 3: 仕入先探索
@@ -497,8 +500,8 @@ def _run_auto_intake(
         official_match, preset_candidate_urls, use_funnel,
     )
     if not candidate_urls:
-        print("  ❌ 仕入先 URL を自動取得できませんでした。")
-        print("  → 手動モード: py intake.py で URL を貼り付けてください。")
+        cli_print("  ❌ 仕入先 URL を自動取得できませんでした。")
+        cli_print("  → 手動モード: py intake.py で URL を貼り付けてください。")
         return AutoIntakeOutcome(False, SKIP_NO_SUPPLY)
 
     # Step 4: スクレイプ
@@ -525,16 +528,16 @@ def _run_auto_intake(
     if source_price <= 0 or not (source_url or "").strip():
         if match_score is None:
             match_score = score_when_no_supply(variant, reason="価格・URL未取得")
-        print(match_score.format_console())
-        print(
+        cli_print(match_score.format_console())
+        cli_print(
             "  ⚠️  仕入先の価格・在庫を取得できませんでした。"
             "誤ったURLをシートに書かないため、反映をスキップします。"
         )
         from lib.funnel_policy import rescue_hint
 
-        print(f"  → {rescue_hint()}")
-        print("  → または py intake.py で正しい新品の商品URLを貼って再登録してください。")
-        print(
+        cli_print(f"  → {rescue_hint()}")
+        cli_print("  → または py intake.py で正しい新品の商品URLを貼って再登録してください。")
+        cli_print(
             "  ※ FARFETCH で ¥数十万が出る場合、定価>転売価格で利益マイナスになることがあります。"
             "ブラウザで価格を確認して手動 intake が確実です。"
         )
@@ -576,13 +579,13 @@ def _resolve_buyma_price_auto(
     factor = _price_factor()
     if demand.min_price:
         suggested = int(round(demand.min_price * factor))
-        print(
+        cli_print(
             f"\n  売価案: 競合最安 ¥{demand.min_price:,} × {factor} "
             f"= ¥{suggested:,}（自動採用）"
         )
         return float(suggested)
     if page_price_jpy and page_price_jpy > 0:
-        print(f"\n  競合最安未取得 → BUYMAページ価格 ¥{page_price_jpy:,} を使用")
+        cli_print(f"\n  競合最安未取得 → BUYMAページ価格 ¥{page_price_jpy:,} を使用")
         return float(page_price_jpy)
     return 0.0
 
@@ -590,16 +593,16 @@ def _resolve_buyma_price_auto(
 def _get_exchange_rate_auto(currency: str = "EUR") -> float:
     """為替レートを API から取得（非対話）。"""
     if (currency or "").upper() == "JPY":
-        print("  → 仕入先は JPY 建て（為替 1.0）")
+        cli_print("  → 仕入先は JPY 建て（為替 1.0）")
         return 1.0
     try:
         rate = get_rate(currency, "JPY")
         if rate:
-            print(f"  → {currency}/JPY: {rate:.2f}（自動取得）")
+            cli_print(f"  → {currency}/JPY: {rate:.2f}（自動取得）")
             return round(rate, 2)
     except Exception as e:
-        print(f"  ⚠️  為替自動取得失敗: {e}")
-    print("  → デフォルト為替 155.0 を使用")
+        cli_print(f"  ⚠️  為替自動取得失敗: {e}")
+    cli_print("  → デフォルト為替 155.0 を使用")
     return 155.0
 
 
