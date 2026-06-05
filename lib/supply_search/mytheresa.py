@@ -24,9 +24,7 @@ from lib.async_compat import run_sync
 from lib.supply_search.json_walk import (
     SearchHit,
     collect_hits_from_json_text,
-    normalize_style_token,
 )
-from lib.supply_search_utils import infer_supply_category_hints
 
 logger = logging.getLogger(__name__)
 
@@ -243,37 +241,11 @@ def _score_item(
     product_name: str,
     brand: str,
 ) -> int:
-    score = 30
-    blob = f"{item.name} {item.path}".lower()
-    sid = (style_id or "").strip()
-    if sid:
-        compact = normalize_style_token(sid)
-        if compact and compact in normalize_style_token(blob):
-            score += 100
-    pos, neg = infer_supply_category_hints(product_name)
-    for hint in pos:
-        h = hint.lower().replace("-", " ")
-        if h in blob or h.replace(" ", "-") in item.path.lower():
-            score += 25
-        if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag")):
-            score += 25
-        if hint == "wallet" and "wallet" in blob:
-            score += 25
-        if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
-            score += 20
-    for hint in neg:
-        if hint.lower() in blob:
-            score -= 40
-    if brand and brand.lower().replace(" ", "") not in blob.replace("-", ""):
-        if "prada" in brand.lower() and "prada" not in blob:
-            score -= 20
-    if _PREOWNED_PATH.search(item.path) or _PREOWNED_PATH.search(item.name):
-        score -= 35
-    if not is_valid_mytheresa_product_url(item.url):
-        score -= 100
-    if item.source == "json_ld_itemlist":
-        score += 5
-    return score
+    from lib.supply_search.base_search import score_catalog_item_base
+    return score_catalog_item_base(
+        item, style_id=style_id, product_name=product_name, brand=brand,
+        preowned_re=_PREOWNED_PATH, url_validator=is_valid_mytheresa_product_url,
+    )
 
 
 def rank_mytheresa_catalog_items(
@@ -284,12 +256,11 @@ def rank_mytheresa_catalog_items(
     brand: str = "",
     limit: int = 5,
 ) -> list[tuple[MytheresaCatalogItem, int]]:
-    scored = [
-        (item, _score_item(item, style_id=style_id, product_name=product_name, brand=brand))
-        for item in items
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:limit]
+    from lib.supply_search.base_search import rank_catalog_items
+    return rank_catalog_items(
+        items, style_id=style_id, product_name=product_name,
+        brand=brand, limit=limit, scorer=_score_item,
+    )
 
 
 def merge_search_hits(
@@ -300,14 +271,13 @@ def merge_search_hits(
     product_name: str,
     brand: str,
 ) -> list[str]:
-    from lib.supply_search.base_search import merge_ranked_urls
-
-    ranked = rank_mytheresa_catalog_items(
-        catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
+    from lib.supply_search.base_search import rank_merge_and_debug
+    urls, _ = rank_merge_and_debug(
+        catalog, xhr_hits, style_id=style_id, product_name=product_name,
+        brand=brand, base_url=_BASE, url_validator=is_valid_mytheresa_product_url,
+        scorer=_score_item,
     )
-    return merge_ranked_urls(
-        ranked, xhr_hits, base_url=_BASE, url_validator=is_valid_mytheresa_product_url,
-    )
+    return urls
 
 
 async def search_mytheresa_product_urls(

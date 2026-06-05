@@ -261,3 +261,122 @@ def build_top_scores_debug(
             entry["sku"] = item.sku
         out.append(entry)
     return out
+
+
+# ============================================================================
+# 共通スコアリング
+# ============================================================================
+
+def score_catalog_item_base(
+    item: Any,
+    *,
+    style_id: str,
+    product_name: str,
+    brand: str,
+    preowned_re: Optional[re.Pattern[str]] = None,
+    url_validator: Optional[Any] = None,
+) -> int:
+    """カタログアイテムの共通スコアリングロジック。
+
+    各サイトの ``_score_item`` で共有するベーススコアを算出する。
+    サイト固有のボーナス/ペナルティは呼び出し側で加減すること。
+    """
+    from lib.supply_search.json_walk import normalize_style_token
+    from lib.supply_search_utils import infer_supply_category_hints
+
+    score = 30
+
+    name = getattr(item, "name", "")
+    path = getattr(item, "path", "")
+    sku = getattr(item, "sku", "")
+    item_brand = getattr(item, "brand", "")
+    blob = f"{name} {item_brand} {path} {sku}".lower()
+
+    sid = (style_id or "").strip()
+    if sid:
+        compact = normalize_style_token(sid)
+        if compact and compact in normalize_style_token(blob):
+            score += 100
+
+    pos, neg = infer_supply_category_hints(product_name)
+    for hint in pos:
+        h = hint.lower().replace("-", " ")
+        if h in blob or h.replace(" ", "-") in path.lower():
+            score += 25
+        if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag")):
+            score += 25
+        if hint == "wallet" and "wallet" in blob:
+            score += 25
+        if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
+            score += 20
+    for hint in neg:
+        if hint.lower() in blob:
+            score -= 40
+
+    if brand and brand.lower().replace(" ", "") not in blob.replace("-", ""):
+        score -= 20
+
+    if preowned_re and (preowned_re.search(path) or preowned_re.search(name)):
+        score -= 35
+
+    url = getattr(item, "url", "")
+    if url_validator and not url_validator(url):
+        score -= 100
+
+    source = getattr(item, "source", "")
+    if source == "json_ld_itemlist":
+        score += 5
+
+    return score
+
+
+def rank_catalog_items(
+    items: list[Any],
+    *,
+    style_id: str = "",
+    product_name: str = "",
+    brand: str = "",
+    limit: int = 5,
+    scorer: Optional[Any] = None,
+    preowned_re: Optional[re.Pattern[str]] = None,
+    url_validator: Optional[Any] = None,
+) -> list[tuple[Any, int]]:
+    """カタログアイテムをスコアでランキングする共通関数。"""
+    if scorer:
+        scored = [(it, scorer(it, style_id=style_id, product_name=product_name, brand=brand)) for it in items]
+    else:
+        scored = [
+            (it, score_catalog_item_base(
+                it, style_id=style_id, product_name=product_name,
+                brand=brand, preowned_re=preowned_re, url_validator=url_validator,
+            ))
+            for it in items
+        ]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored[:limit]
+
+
+def rank_merge_and_debug(
+    catalog: list[Any],
+    xhr_hits: list[Any],
+    *,
+    style_id: str,
+    product_name: str,
+    brand: str,
+    base_url: str,
+    url_validator: Any,
+    scorer: Optional[Any] = None,
+    preowned_re: Optional[re.Pattern[str]] = None,
+    limit: int = 8,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """ランキング→マージ→デバッグ情報を一括で返す共通関数。"""
+    ranked = rank_catalog_items(
+        catalog, style_id=style_id, product_name=product_name,
+        brand=brand, limit=limit, scorer=scorer,
+        preowned_re=preowned_re, url_validator=url_validator,
+    )
+    urls = merge_ranked_urls(
+        ranked, xhr_hits, base_url=base_url, url_validator=url_validator,
+    )
+    top_scores = build_top_scores_debug(ranked)
+    return urls, top_scores

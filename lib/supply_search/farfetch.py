@@ -207,12 +207,12 @@ def rank_farfetch_catalog_items(
     brand: str = "",
     limit: int = 5,
 ) -> list[tuple[FarfetchCatalogItem, int]]:
-    scored = [
-        (item, _score_item(item, style_id=style_id, product_name=product_name, brand=brand))
-        for item in items
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:limit]
+    from lib.supply_search.base_search import rank_catalog_items
+
+    return rank_catalog_items(
+        items, style_id=style_id, product_name=product_name,
+        brand=brand, limit=limit, scorer=_score_item,
+    )
 
 
 def merge_search_hits(
@@ -224,14 +224,14 @@ def merge_search_hits(
     brand: str,
 ) -> list[str]:
     """カタログ + XHR を統合し URL リストを返す。"""
-    from lib.supply_search.base_search import merge_ranked_urls
+    from lib.supply_search.base_search import rank_merge_and_debug
 
-    ranked = rank_farfetch_catalog_items(
-        catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
+    urls, _ = rank_merge_and_debug(
+        catalog, xhr_hits, style_id=style_id, product_name=product_name,
+        brand=brand, base_url=_BASE, url_validator=is_valid_farfetch_product_url,
+        scorer=_score_item,
     )
-    return merge_ranked_urls(
-        ranked, xhr_hits, base_url=_BASE, url_validator=is_valid_farfetch_product_url,
-    )
+    return urls
 
 
 async def search_farfetch_product_urls(
