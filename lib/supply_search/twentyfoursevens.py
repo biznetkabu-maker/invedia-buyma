@@ -12,7 +12,6 @@ LVMH グループ運営。クラウド headless では Akamai 403 になりや�
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass
@@ -20,6 +19,7 @@ from typing import Any, Optional
 from urllib.parse import quote_plus
 
 from lib.async_compat import run_sync
+from lib.supply_search.base_search import iter_json_ld_products
 from lib.supply_search.json_walk import (
     SearchHit,
     collect_hits_from_json_text,
@@ -42,10 +42,6 @@ _XHR_URL_HINTS = (
     "listing",
 )
 
-_JSON_LD_RE = re.compile(
-    r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
-    re.I | re.S,
-)
 _PRODUCT_HREF_RE = re.compile(
     r'https?://(?:www\.)?24s\.com/(?:en-[a-z]{2}/)?[a-z0-9]+(?:-[a-z0-9]+)+(?:_[A-Z0-9]+)?',
     re.I,
@@ -165,55 +161,8 @@ def _parse_json_ld_products(html: str) -> list[TwentyFourSCatalogItem]:
             )
         )
 
-    for m in _JSON_LD_RE.finditer(html or ""):
-        try:
-            data = json.loads(m.group(1))
-        except json.JSONDecodeError:
-            continue
-        roots = data if isinstance(data, list) else [data]
-        for root in roots:
-            if not isinstance(root, dict):
-                continue
-            if root.get("@type") == "ItemList":
-                for el in root.get("itemListElement") or []:
-                    if not isinstance(el, dict):
-                        continue
-                    item = el.get("item") if isinstance(el.get("item"), dict) else el
-                    if not isinstance(item, dict):
-                        continue
-                    brand_raw = item.get("brand") or {}
-                    brand = (
-                        brand_raw.get("name", "")
-                        if isinstance(brand_raw, dict)
-                        else str(brand_raw)
-                    )
-                    offers = item.get("offers") or {}
-                    if isinstance(offers, list):
-                        offers = offers[0] if offers else {}
-                    _add(
-                        str(item.get("name") or el.get("name") or ""),
-                        str(brand),
-                        str((offers or {}).get("url") or item.get("url") or el.get("url") or ""),
-                        str(item.get("sku") or item.get("mpn") or ""),
-                        "json_ld_itemlist",
-                    )
-            elif root.get("@type") == "Product":
-                brand_raw = root.get("brand") or {}
-                brand = (
-                    brand_raw.get("name", "")
-                    if isinstance(brand_raw, dict)
-                    else str(brand_raw)
-                )
-                offers = root.get("offers") or {}
-                if isinstance(offers, list):
-                    offers = offers[0] if offers else {}
-                _add(
-                    str(root.get("name") or ""),
-                    str(brand),
-                    str((offers or {}).get("url") or root.get("url") or ""),
-                    str(root.get("sku") or root.get("mpn") or ""),
-                    "json_ld_product",
-                )
+    for rec in iter_json_ld_products(html):
+        _add(rec["name"], rec["brand"], rec["url"], rec["sku"], rec["source"])
     return out
 
 

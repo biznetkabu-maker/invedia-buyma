@@ -110,6 +110,64 @@ def extract_json_ld_blocks(html: str) -> list[Any]:
     return results
 
 
+def _json_ld_brand_name(raw: Any) -> str:
+    """JSON-LD の brand フィールド（dict / 文字列）から名称を取り出す。"""
+    if isinstance(raw, dict):
+        return str(raw.get("name", ""))
+    return str(raw or "")
+
+
+def _json_ld_offer_url(offers: Any) -> str:
+    """JSON-LD の offers（dict / list）から URL を取り出す。"""
+    if isinstance(offers, list):
+        offers = offers[0] if offers else {}
+    if isinstance(offers, dict):
+        return str(offers.get("url") or "")
+    return ""
+
+
+def iter_json_ld_products(html: str) -> list[dict[str, str]]:
+    """JSON-LD の ItemList / Product から正規化済み商品レコードを返す。
+
+    各レコードは ``{"name", "brand", "url", "sku", "source"}`` の dict。
+    サイト個別の検証・データクラス変換は呼び出し側で行う。
+    """
+    records: list[dict[str, str]] = []
+
+    def _from_product(node: dict[str, Any], source: str, fallback: dict[str, Any]) -> None:
+        records.append(
+            {
+                "name": str(node.get("name") or fallback.get("name") or ""),
+                "brand": _json_ld_brand_name(node.get("brand")),
+                "url": str(
+                    _json_ld_offer_url(node.get("offers") or {})
+                    or node.get("url")
+                    or fallback.get("url")
+                    or ""
+                ),
+                "sku": str(node.get("sku") or node.get("mpn") or ""),
+                "source": source,
+            }
+        )
+
+    for data in extract_json_ld_blocks(html):
+        roots = data if isinstance(data, list) else [data]
+        for root in roots:
+            if not isinstance(root, dict):
+                continue
+            type_ = root.get("@type")
+            if type_ == "ItemList":
+                for el in root.get("itemListElement") or []:
+                    if not isinstance(el, dict):
+                        continue
+                    item = el.get("item") if isinstance(el.get("item"), dict) else el
+                    if isinstance(item, dict):
+                        _from_product(item, "json_ld_itemlist", el)
+            elif type_ == "Product":
+                _from_product(root, "json_ld_product", {})
+    return records
+
+
 def extract_product_urls_from_html(
     html: str,
     href_re: re.Pattern[str],
