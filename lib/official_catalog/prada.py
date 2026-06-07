@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 from urllib.parse import urljoin
 
+from lib.async_compat import run_sync
+
 logger = logging.getLogger(__name__)
 
 _BASE = "https://www.prada.com"

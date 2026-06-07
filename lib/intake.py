@@ -40,7 +40,11 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from lib.multi_source import BestSourceResult
+    from lib.product_identity import MatchScore, VariantKey
 
 logger = logging.getLogger(__name__)
 

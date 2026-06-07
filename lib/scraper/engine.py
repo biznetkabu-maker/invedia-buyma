@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from playwright.async_api import Browser, BrowserContext, async_playwright
