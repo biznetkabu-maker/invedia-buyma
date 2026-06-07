@@ -384,7 +384,9 @@ def create_app():
 # ============================================================================
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from lib.logging_config import setup_logging
+
+    setup_logging(level=logging.INFO)
 
     if not _CHANNEL_SECRET or not _ACCESS_TOKEN:
         print(

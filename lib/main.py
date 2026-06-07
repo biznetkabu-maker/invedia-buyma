@@ -34,11 +34,6 @@ from lib.scraper import PriceScraper, ScrapedResult
 from lib.scraper.proxy import ProxyRotator
 from lib.sheet_manager import ProductRecord, SheetManager
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -577,6 +572,9 @@ async def run(config: Config) -> list[ProductResult]:
 
 def main() -> int:
     """エントリーポイント。終了コードを返す（0=正常, 1=エラー）。"""
+    from lib.logging_config import setup_logging
+
+    setup_logging(level=logging.INFO)
     config = Config.from_env()
 
     try:

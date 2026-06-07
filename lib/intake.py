@@ -42,7 +42,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 from lib.buyma_demand import BUYMADemandScraper, BUYMADemandSignal
@@ -773,6 +772,9 @@ def _write_to_sheet_quiet(record: ProductRecord) -> bool:
 # ============================================================================
 
 def main() -> int:
+    from lib.logging_config import setup_logging
+
+    setup_logging(level=logging.WARNING)
     parser = argparse.ArgumentParser(description="BUYMA 商品取り込みツール")
     parser.add_argument("--batch", metavar="FILE.csv",
                         help="CSV を一括評価する（スクレイプなし）")
