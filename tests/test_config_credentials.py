@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 from lib.config import Config
 
-
 _FAKE_JSON = json.dumps({"type": "service_account", "project_id": "x"})
 
 
