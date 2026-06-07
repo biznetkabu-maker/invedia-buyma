@@ -27,4 +27,4 @@ jobs:
       - name: ruff lint check
         run: ruff check lib/ --no-fix
       - name: mypy type check
-        run: mypy lib/config.py lib/profit_calculator.py lib/file_lock.py lib/logging_config.py lib/sheet_manager.py lib/forex.py lib/line_notifier.py lib/product_finder.py lib/brand_utils.py lib/supply_url_cache.py lib/funnel_policy.py lib/sheet_analysis.py lib/intake_cli.py lib/buyma_style_id.py lib/purchase_evaluator.py lib/style_id_utils.py lib/notification_manager.py lib/buyma_demand.py lib/multi_source.py lib/buyma_automator.py --no-error-summary
+        run: mypy lib/config.py lib/profit_calculator.py lib/file_lock.py lib/logging_config.py lib/sheet_manager.py lib/forex.py lib/line_notifier.py lib/product_finder.py lib/brand_utils.py lib/supply_url_cache.py lib/funnel_policy.py lib/sheet_analysis.py lib/intake_cli.py lib/buyma_style_id.py lib/purchase_evaluator.py lib/style_id_utils.py lib/notification_manager.py lib/buyma_demand.py lib/multi_source.py lib/buyma_automator.py lib/async_compat.py --no-error-summary

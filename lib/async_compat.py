@@ -7,12 +7,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TypeVar
+from typing import Any, Coroutine, TypeVar
 
 T = TypeVar("T")
 
 
-def run_sync(coro: asyncio.coroutines, *_: object) -> T:  # type: ignore[type-arg]
+def run_sync(coro: Coroutine[Any, Any, T], *_: object) -> T:
     """同期コンテキストからコルーチンを実行する。
 
     * イベントループが存在しない → ``asyncio.run()`` で実行

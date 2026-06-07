@@ -13,7 +13,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast
 
 import gspread
 
@@ -48,7 +48,7 @@ def _sheets_retry(max_retries: int = 5, base_wait: float = 20.0) -> Callable[[F]
                         time.sleep(wait_sec)
                         continue
                     raise
-        return wrapper  # type: ignore[return-value]
+        return cast(F, wrapper)
 
     return decorator
 
