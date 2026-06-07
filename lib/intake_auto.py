@@ -352,8 +352,9 @@ def _auto_evaluate_and_write(
     skip_low_grades: bool,
 ) -> "AutoIntakeOutcome":
     """Steps 5-6: グレード判定・シート書き込み。"""
+    from lib.funnel_policy import SKIP_LOW_GRADE, SKIP_NO_PRICE
     from lib.intake import _build_record, _evaluate, _write_to_sheet_quiet
-    from lib.intake_funnel import SKIP_LOW_GRADE, SKIP_NO_PRICE, AutoIntakeOutcome
+    from lib.intake_funnel import AutoIntakeOutcome
     from lib.product_identity import summarize_best_source_result
     from lib.supply_search_utils import style_id_for_matching
 
@@ -429,13 +430,15 @@ def _run_auto_intake(
     use_funnel: bool = True,
 ) -> "AutoIntakeOutcome":
     """BUYMA URL を起点に仕入先探索〜シート反映までを非対話で実行する。"""
-    from lib.intake import _run_demand_check, _scrape_and_select
-    from lib.intake_funnel import (
+    from lib.funnel_policy import (
         SKIP_BUYMA_FETCH,
         SKIP_NO_PRICE,
         SKIP_NO_SELL_PRICE,
         SKIP_NO_SUPPLY,
         SKIP_OUT_OF_SCOPE,
+    )
+    from lib.intake import _run_demand_check, _scrape_and_select
+    from lib.intake_funnel import (
         AutoIntakeOutcome,
         is_non_apparel_product_name,
     )

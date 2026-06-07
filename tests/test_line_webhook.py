@@ -177,7 +177,7 @@ class TestCmdProfit:
 
     @patch("lib.line_webhook.reply_text")
     def test_profit_success(self, mock_reply):
-        with patch("lib.line_webhook.calculate_profit") as mock_calc:
+        with patch("lib.profit_calculator.calculate_profit") as mock_calc:
             mock_result = MagicMock()
             mock_result.jpy_cost = 124000
             mock_result.customs_cost = 12400
@@ -193,6 +193,99 @@ class TestCmdProfit:
 # ============================================================================
 # _to_float テスト
 # ============================================================================
+
+
+def _make_record(**kwargs):
+    from lib.sheet_manager import ProductRecord
+    return ProductRecord(**kwargs)
+
+
+def _patch_sheet(records):
+    """Config.from_env と SheetManager をモックして records を返すコンテキスト。"""
+    cfg = MagicMock()
+    cfg.spreadsheet_id = "sid"
+    cfg.worksheet_name = "ws"
+    cfg.credentials_path = "creds"
+    manager = MagicMock()
+    manager.get_all_records.return_value = records
+    return (
+        patch("lib.config.Config.from_env", return_value=cfg),
+        patch("lib.sheet_manager.SheetManager", return_value=manager),
+    )
+
+
+class TestCmdList:
+    @patch("lib.line_webhook.reply_text")
+    def test_list_empty(self, mock_reply):
+        p_cfg, p_mgr = _patch_sheet([])
+        with p_cfg, p_mgr:
+            lw._cmd_list("token")
+        assert "登録されていません" in mock_reply.call_args[0][1]
+
+    @patch("lib.line_webhook.reply_text")
+    def test_list_with_records(self, mock_reply):
+        recs = [
+            _make_record(商品名="バッグA", ブランド="PRADA", BUYMA販売価格="50000",
+                         利益額="35000", 在庫ステータス="出品中")
+            for _ in range(3)
+        ]
+        p_cfg, p_mgr = _patch_sheet(recs)
+        with p_cfg, p_mgr:
+            lw._cmd_list("token")
+        out = mock_reply.call_args[0][1]
+        assert "登録商品" in out
+        assert "バッグA" in out
+
+    @patch("lib.line_webhook.reply_text")
+    def test_list_error(self, mock_reply):
+        with patch("lib.config.Config.from_env", side_effect=RuntimeError("boom")):
+            lw._cmd_list("token")
+        assert "エラー" in mock_reply.call_args[0][1]
+
+
+class TestCmdTreasure:
+    @patch("lib.line_webhook.reply_text")
+    def test_treasure_none_found(self, mock_reply):
+        recs = [_make_record(利益額="1000", 在庫ステータス="出品中")]
+        p_cfg, p_mgr = _patch_sheet(recs)
+        with p_cfg, p_mgr:
+            lw._cmd_treasure("token")
+        assert "ありません" in mock_reply.call_args[0][1]
+
+    @patch("lib.line_webhook.reply_text")
+    def test_treasure_found(self, mock_reply):
+        recs = [
+            _make_record(商品名="お宝バッグ", ブランド="GUCCI", 利益額="50000",
+                         在庫ステータス="出品中", 仕入れURL="https://example.com/x"),
+            _make_record(商品名="安物", 利益額="500", 在庫ステータス="出品中"),
+        ]
+        p_cfg, p_mgr = _patch_sheet(recs)
+        with p_cfg, p_mgr:
+            lw._cmd_treasure("token")
+        out = mock_reply.call_args[0][1]
+        assert "お宝バッグ" in out
+        assert "安物" not in out
+
+
+class TestCmdScrape:
+    @patch("subprocess.Popen")
+    @patch("lib.line_webhook.reply_text")
+    def test_scrape_launches(self, mock_reply, mock_popen):
+        lw._cmd_scrape("token")
+        mock_popen.assert_called_once()
+        assert "巡回" in mock_reply.call_args[0][1]
+
+
+class TestDispatchListTreasure:
+    @patch("lib.line_webhook._cmd_list")
+    def test_dispatch_list(self, mock_cmd):
+        lw.handle_message(_make_event("リスト"))
+        mock_cmd.assert_called_once()
+
+    @patch("lib.line_webhook._cmd_treasure")
+    def test_dispatch_treasure(self, mock_cmd):
+        lw.handle_message(_make_event("お宝"))
+        mock_cmd.assert_called_once()
 
 
 class TestToFloat:
@@ -217,12 +310,10 @@ class TestToFloat:
 # ============================================================================
 
 
-flask = pytest.importorskip("flask")
-
-
 class TestFlaskApp:
     @pytest.fixture
     def client(self):
+        pytest.importorskip("flask")
         app = lw.create_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
