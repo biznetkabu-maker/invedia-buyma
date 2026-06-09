@@ -4,8 +4,9 @@ ListingData, ListingResult, validate_listing, build_listing_description,
 record_to_listing, BUYMAAutomator のテスト。
 """
 
+import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from lib.buyma_automator import (
     BUYMAAutomator,
@@ -16,6 +17,12 @@ from lib.buyma_automator import (
     record_to_listing,
     validate_listing,
     _extract_item_id,
+    _load_session_cookies,
+    _random_jitter,
+    _random_type_delay,
+    _safe_fill,
+    _safe_select,
+    _save_session_cookies,
 )
 from lib.sheet_manager import ProductRecord
 
@@ -241,6 +248,78 @@ class TestListingValidationResult(unittest.TestCase):
         s = r.summary()
         self.assertIn("エラー", s)
         self.assertIn("警告", s)
+
+
+class TestPostListingNotConfigured(unittest.TestCase):
+    def test_returns_failure_when_not_configured(self):
+        auto = BUYMAAutomator(email="", password="")
+        result = asyncio.run(auto.post_listing_async(
+            ListingData(brand="X", product_name="Y", model_number="M1",
+                        description="desc", buyma_price=1000)
+        ))
+        self.assertFalse(result.success)
+        self.assertIn("未設定", result.error)
+
+
+class TestRandomHelpers(unittest.TestCase):
+    def test_jitter_within_range(self):
+        for _ in range(50):
+            v = _random_jitter(1.0, 3.0)
+            self.assertGreaterEqual(v, 1.0)
+            self.assertLessEqual(v, 3.0)
+
+    def test_type_delay_within_range(self):
+        for _ in range(50):
+            v = _random_type_delay()
+            self.assertGreaterEqual(v, 80)
+            self.assertLessEqual(v, 200)
+
+
+class TestSessionCookies(unittest.TestCase):
+    def test_save_and_load_roundtrip(self, ):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "cookies.json"
+            cookies = [{"name": "sid", "value": "abc"}]
+            with patch("lib.buyma_automator._SESSION_COOKIE_FILE", f):
+                _save_session_cookies(cookies)
+                loaded = _load_session_cookies()
+        self.assertEqual(loaded, cookies)
+
+    def test_load_invalid_returns_empty(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "missing.json"
+            with patch("lib.buyma_automator._SESSION_COOKIE_FILE", f):
+                self.assertEqual(_load_session_cookies(), [])
+
+
+class TestSafeFillSelect(unittest.TestCase):
+    def test_safe_fill_when_present(self):
+        el = AsyncMock()
+        page = AsyncMock()
+        page.query_selector = AsyncMock(return_value=el)
+        asyncio.run(_safe_fill(page, "#name", "value"))
+        el.fill.assert_awaited_once_with("value")
+
+    def test_safe_fill_when_absent(self):
+        page = AsyncMock()
+        page.query_selector = AsyncMock(return_value=None)
+        asyncio.run(_safe_fill(page, "#name", "value"))  # no exception
+
+    def test_safe_fill_swallows_exception(self):
+        page = AsyncMock()
+        page.query_selector = AsyncMock(side_effect=RuntimeError("boom"))
+        asyncio.run(_safe_fill(page, "#name", "value"))  # no exception
+
+    def test_safe_select_when_present(self):
+        el = AsyncMock()
+        page = AsyncMock()
+        page.query_selector = AsyncMock(return_value=el)
+        asyncio.run(_safe_select(page, "#sz", "M"))
+        el.select_option.assert_awaited_once_with(value="M")
 
 
 if __name__ == "__main__":
