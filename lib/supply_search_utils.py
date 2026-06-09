@@ -273,55 +273,61 @@ def is_fragment_case_product_name(product_name: str) -> bool:
     )
 
 
+def _has(name_l: str, *keywords: str) -> bool:
+    """name_l に keywords のいずれかが含まれるか。"""
+    return any(k in name_l for k in keywords)
+
+
+# キーワード一致で確定するシンプルなカテゴリ語（優先順）。
+_SIMPLE_CATEGORY_RULES: tuple[tuple[tuple[str, ...], list[str]], ...] = (
+    (("ベルトバッグ", "ボディバッグ", "belt bag", "body bag", "bum bag",
+      "waist bag"), ["belt-bag", "body-bag", "crossbody"]),
+    (("財布", "wallet", "ウォレット"), ["wallet"]),
+)
+
+
+def _bucket_extras(name_l: str) -> Optional[list[str]]:
+    """バケット / ウィッカー系のカテゴリ語。該当しなければ None。"""
+    wicker = _has(name_l, "ウィッカー", "wicker", "ラタン", "rattan")
+    if not (_has(name_l, "バケット", "bucket bag", "bucket-bag", "bucket") or wicker):
+        return None
+    if wicker:
+        return ["wicker", "bucket-bag", "bucket"]
+    return ["bucket-bag", "bucket", "bag"]
+
+
+def _generic_bag_extras(name_l: str) -> list[str]:
+    """汎用バッグ / トート系のサブカテゴリ語。"""
+    if _has(name_l, "クロシェ", "crochet"):
+        return ["crochet", "tote", "bag"]
+    if _has(name_l, "ショルダー", "shoulder", "2way", "2-way"):
+        return ["shoulder-bag", "shoulder", "bag"]
+    if _has(name_l, "トート", "tote"):
+        return ["tote", "bag"]
+    return ["bag"]
+
+
 def category_site_search_extras(product_name: str) -> list[str]:
     """site: 検索・型番クエリ用の英語カテゴリ語（優先順）。"""
     name_l = (product_name or "").lower()
-    if any(
-        k in name_l
-        for k in (
-            "ベルトバッグ",
-            "ボディバッグ",
-            "belt bag",
-            "body bag",
-            "bum bag",
-            "waist bag",
-        )
-    ):
-        return ["belt-bag", "body-bag", "crossbody"]
-    if any(k in name_l for k in ("財布", "wallet", "ウォレット")):
-        return ["wallet"]
+    for keywords, result in _SIMPLE_CATEGORY_RULES:
+        if _has(name_l, *keywords):
+            return result
     if is_fragment_case_product_name(product_name):
         return ["fragment", "card-holder", "card-case"]
-    if any(
-        k in name_l
-        for k in ("バケット", "bucket bag", "bucket-bag", "bucket")
-    ) or any(k in name_l for k in ("ウィッカー", "wicker", "ラタン", "rattan")):
-        extras = ["bucket-bag", "bucket", "bag"]
-        if any(k in name_l for k in ("ウィッカー", "wicker", "ラタン", "rattan")):
-            return ["wicker", "bucket-bag", "bucket"]
-        return extras
-    if any(
-        k in name_l
-        for k in ("ハンドバッグ", "handbag", "hand bag", "hand-bag")
-    ):
+    bucket = _bucket_extras(name_l)
+    if bucket is not None:
+        return bucket
+    if _has(name_l, "ハンドバッグ", "handbag", "hand bag", "hand-bag"):
         return ["hand-bag", "handbag", "bag"]
-    if any(k in name_l for k in ("サングラス", "sunglass", "eyewear", "メガネ", "眼鏡")):
+    if _has(name_l, "サングラス", "sunglass", "eyewear", "メガネ", "眼鏡"):
         return ["sunglasses"]
-    if any(
-        k in name_l
-        for k in ("ドックキャリ", "キャリーバッグ", "dog carrier", "pet carrier")
-    ):
+    if _has(name_l, "ドックキャリ", "キャリーバッグ", "dog carrier", "pet carrier"):
         return ["dog-carrier", "carrier", "tote"]
     if is_footwear_product_name(product_name):
         return footwear_search_extras(product_name)
-    if any(k in name_l for k in ("バッグ", "bag", "トート", "tote")):
-        if any(k in name_l for k in ("クロシェ", "crochet")):
-            return ["crochet", "tote", "bag"]
-        if any(k in name_l for k in ("ショルダー", "shoulder", "2way", "2-way")):
-            return ["shoulder-bag", "shoulder", "bag"]
-        if any(k in name_l for k in ("トート", "tote")):
-            return ["tote", "bag"]
-        return ["bag"]
+    if _has(name_l, "バッグ", "bag", "トート", "tote"):
+        return _generic_bag_extras(name_l)
     if is_primary_pouch_product_name(product_name):
         return ["pouch", "bag"]
     pos, _ = infer_supply_category_hints(product_name)
@@ -478,6 +484,47 @@ def _dedupe_queries(queries: list[str]) -> list[str]:
     return unique
 
 
+def _append_model_code_queries(
+    queries: list[str],
+    *,
+    brand: str,
+    product_name: str,
+    style_id: str,
+    raw: str,
+    search_sid: str,
+    sid: str,
+    pos: bool,
+) -> None:
+    """タイトル・型番から抽出したモデルコードを queries に追記する。"""
+    for code in extract_model_codes(product_name, style_id, raw):
+        if pos and brand and code.upper() == (search_sid or sid).upper():
+            continue
+        if brand:
+            queries.append(f"{brand} {code}")
+        queries.append(code)
+
+
+def _append_style_id_queries(
+    queries: list[str],
+    *,
+    brand: str,
+    sid: str,
+    search_sid: str,
+    pos: bool,
+) -> None:
+    """型番（生 / サイト検索用）を queries に追記する。"""
+    if sid and is_plausible_model_code(sid) and sid not in queries:
+        queries.append(sid)
+    if search_sid and search_sid != sid:
+        bare = f"{brand} {search_sid}".strip() if brand else search_sid
+    elif search_sid and brand and not pos:
+        bare = f"{brand} {search_sid}".strip()
+    else:
+        return
+    if bare.lower() not in {q.lower() for q in queries}:
+        queries.append(bare)
+
+
 def build_supply_search_queries(
     brand: str,
     product_name: str,
@@ -503,12 +550,10 @@ def build_supply_search_queries(
     search_sid = style_id_for_site_search(sid) if sid else ""
     pos, _ = infer_supply_category_hints(raw or cleaned)
 
-    for code in extract_model_codes(product_name, style_id or "", raw):
-        if pos and brand and code.upper() == (search_sid or sid).upper():
-            continue
-        if brand:
-            queries.append(f"{brand} {code}")
-        queries.append(code)
+    _append_model_code_queries(
+        queries, brand=brand, product_name=product_name, style_id=style_id or "",
+        raw=raw, search_sid=search_sid, sid=sid, pos=bool(pos),
+    )
 
     cat_queries = _build_category_enriched_queries(
         brand, search_sid, queries, raw or cleaned, official_english_name,
@@ -516,16 +561,9 @@ def build_supply_search_queries(
     if cat_queries:
         queries = cat_queries + queries
 
-    if sid and is_plausible_model_code(sid) and sid not in queries:
-        queries.append(sid)
-    if search_sid and search_sid != sid:
-        bare = f"{brand} {search_sid}".strip() if brand else search_sid
-        if bare.lower() not in {q.lower() for q in queries}:
-            queries.append(bare)
-    elif search_sid and brand and not pos:
-        bare = f"{brand} {search_sid}".strip()
-        if bare.lower() not in {q.lower() for q in queries}:
-            queries.append(bare)
+    _append_style_id_queries(
+        queries, brand=brand, sid=sid, search_sid=search_sid, pos=bool(pos),
+    )
 
     if cleaned and cleaned not in queries:
         queries.append(cleaned)
