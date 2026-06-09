@@ -443,6 +443,17 @@ async def _lookup_playwright(
     return collected, debug
 
 
+def _to_int(value: object) -> int:
+    """任意の値を安全に int へ変換する（不正値は 0）。"""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value)
+    return 0
+
+
 @dataclass
 class PradaLookupDiagnostics:
     """診断用（capture_prada_f12 --verbose）。"""
@@ -479,11 +490,11 @@ def lookup_prada_official_diagnose(
             )
             diag.playwright_ok = True
             diag.mpn_in_search_html = bool(pw_debug.get("mpn_in_search_html"))
-            diag.prada_pdp_links_in_html = int(
-                pw_debug.get("prada_pdp_links_in_html") or 0
+            diag.prada_pdp_links_in_html = _to_int(
+                pw_debug.get("prada_pdp_links_in_html")
             )
-            diag.ddg_urllib = int(pw_debug.get("ddg_urllib") or 0)
-            diag.ddg_playwright = int(pw_debug.get("ddg_playwright") or 0)
+            diag.ddg_urllib = _to_int(pw_debug.get("ddg_urllib"))
+            diag.ddg_playwright = _to_int(pw_debug.get("ddg_playwright"))
             diag.search_final_url = str(pw_debug.get("final_url") or "")[:120]
         except Exception as e:
             pw_err = str(e)
