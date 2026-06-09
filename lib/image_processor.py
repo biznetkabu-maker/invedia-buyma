@@ -432,7 +432,7 @@ def _download_image(url: str, timeout: int = 30) -> bytes:
     }
     resp = requests.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
-    return resp.content
+    return bytes(resp.content)
 
 
 def _image_to_png_bytes(img: "Image.Image") -> bytes:

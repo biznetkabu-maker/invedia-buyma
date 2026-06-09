@@ -342,6 +342,12 @@ class LINENotifier:
     def is_configured(self) -> bool:
         return self._notify.is_configured or self._messaging.is_configured
 
+    def send_text(self, message: str) -> NotificationResult:
+        """任意のテキストを通知する（Messaging API 優先、なければ Notify）。"""
+        if self._messaging.is_configured:
+            return self._messaging.send_text(message)
+        return self._notify.send(message)
+
     def notify_treasure(self, alert: TreasureAlert) -> NotificationResult:
         """1件のお宝商品を通知する。"""
         return self.notify_treasures([alert])

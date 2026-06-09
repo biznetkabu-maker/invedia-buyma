@@ -343,7 +343,7 @@ def apply_department_to_search_template(template: str, department: str, domain: 
 
         mr = SITE_BY_DOMAIN.get("mrporter.com")
         if mr:
-            return mr.search_url_template
+            return str(mr.search_url_template)
     if dept == "men":
         tpl = tpl.replace("/women/", "/men/").replace("/women?", "/men?")
     return tpl

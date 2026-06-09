@@ -155,7 +155,7 @@ def _check_style_id_mismatches(results: list[ProductResult]) -> None:
         from lib.line_notifier import LINENotifier
         notifier = LINENotifier()
         if notifier.is_configured:
-            notifier._notify_raw(alert_text)
+            notifier.send_text(alert_text)
     except Exception:
         logger.debug("LINE通知送信失敗", exc_info=True)
 
@@ -212,7 +212,8 @@ _UNKNOWN_HISTORY_FILE = Path("scraper_unknown_history.json")
 def _load_unknown_history() -> dict[str, int]:
     """商品名→連続 unknown 回数のキャッシュを読む。"""
     from lib.file_lock import atomic_json_read
-    return atomic_json_read(_UNKNOWN_HISTORY_FILE, default={})
+    data = atomic_json_read(_UNKNOWN_HISTORY_FILE, default={})
+    return {str(k): int(v) for k, v in data.items()}
 
 
 def _save_unknown_history(history: dict[str, int]) -> None:
@@ -257,7 +258,7 @@ def _check_scraper_health(results: list[ProductResult], config: Config) -> None:
             from lib.line_notifier import LINENotifier
             notifier = LINENotifier()
             if notifier.is_configured:
-                notifier._notify_raw(alert_text)
+                notifier.send_text(alert_text)
         except Exception:
             logger.debug("LINE通知送信失敗", exc_info=True)
 

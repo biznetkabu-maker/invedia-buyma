@@ -115,7 +115,7 @@ class TestCheckStyleIdMismatches(unittest.TestCase):
         notifier = MagicMock()
         with patch("lib.line_notifier.LINENotifier", return_value=notifier):
             _check_style_id_mismatches([_result(rec, scrape)])
-        notifier._notify_raw.assert_not_called()
+        notifier.send_text.assert_not_called()
 
     def test_alert_on_mismatch(self):
         rec = _make_record(型番="ABC123")
@@ -124,7 +124,7 @@ class TestCheckStyleIdMismatches(unittest.TestCase):
         notifier.is_configured = True
         with patch("lib.line_notifier.LINENotifier", return_value=notifier):
             _check_style_id_mismatches([_result(rec, scrape)])
-        notifier._notify_raw.assert_called_once()
+        notifier.send_text.assert_called_once()
 
     def test_skips_when_no_buyma_style_id(self):
         rec = _make_record(型番="")
@@ -155,7 +155,7 @@ class TestCheckScraperHealth(unittest.TestCase):
             # 2回連続 unknown でアラート
             _check_scraper_health([_result(rec, scrape)], config)
             _check_scraper_health([_result(rec, scrape)], config)
-        notifier._notify_raw.assert_called_once()
+        notifier.send_text.assert_called_once()
 
     def test_success_resets_history(self):
         rec = _make_record()
@@ -169,7 +169,7 @@ class TestCheckScraperHealth(unittest.TestCase):
         notifier.is_configured = True
         with patch("lib.line_notifier.LINENotifier", return_value=notifier):
             _check_scraper_health([_result(rec, bad)], config)
-        notifier._notify_raw.assert_not_called()
+        notifier.send_text.assert_not_called()
 
 
 class TestWriteResultsToSheet(unittest.TestCase):

@@ -247,7 +247,7 @@ def fetch_buyma_item_info_sync(
     page_wait_ms: int = 2500,
     timeout_ms: int = 25_000,
 ) -> Optional[BuymaItemInfo]:
-    return run_sync(
+    info: Optional[BuymaItemInfo] = run_sync(
         fetch_buyma_item_info(
             url,
             headless=headless,
@@ -255,3 +255,4 @@ def fetch_buyma_item_info_sync(
             timeout_ms=timeout_ms,
         )
     )
+    return info
