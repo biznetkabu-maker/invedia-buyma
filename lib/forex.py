@@ -208,6 +208,26 @@ def _is_cache_valid(cache: _CacheDict, key: str) -> bool:
 
 # ── シート自動更新ヘルパー ────────────────────────────────────────────────────
 
+# 仕入先ドメイン → 通貨コードの対応表
+_DOMAIN_CURRENCY: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("USD", ("saksfifthavenue.com", "ssense.com", "neimanmarcus.com")),
+    ("GBP", ("harrods.com", "matchesfashion.com", "net-a-porter.com",
+             "selfridges.com", "mrporter.com", "harveynichols.com")),
+    ("EUR", ("luisaviaroma.com", "farfetch.com", "mytheresa.com",
+             "tessabit.com", "giglio.com", "biffi.com", "yoox.com",
+             "theoutnet.com", "24s.com")),
+)
+
+
+def _currency_from_url(url: str) -> Optional[str]:
+    """仕入れURLのドメインから通貨コードを推定する（不明なら None）。"""
+    u = (url or "").lower()
+    for currency, domains in _DOMAIN_CURRENCY:
+        if any(d in u for d in domains):
+            return currency
+    return None
+
+
 def update_sheet_exchange_rates(
     manager,
     currencies: list[str] | None = None,
@@ -237,14 +257,8 @@ def update_sheet_exchange_rates(
     updated = 0
     for record in records:
         # 各レコードの為替欄を更新（仕入れURLから通貨を推定）
-        url = record.仕入れURL.lower()
-        if "saksfifthavenue.com" in url or "ssense.com" in url or "neimanmarcus.com" in url:
-            cur = "USD"
-        elif "harrods.com" in url or "matchesfashion.com" in url or "net-a-porter.com" in url or "selfridges.com" in url or "mrporter.com" in url or "harveynichols.com" in url:
-            cur = "GBP"
-        elif "luisaviaroma.com" in url or "farfetch.com" in url or "mytheresa.com" in url or "tessabit.com" in url or "giglio.com" in url or "biffi.com" in url or "yoox.com" in url or "theoutnet.com" in url or "24s.com" in url:
-            cur = "EUR"
-        else:
+        cur = _currency_from_url(record.仕入れURL)
+        if cur is None:
             continue  # 判定できない場合はスキップ
 
         new_rate = rates.get(cur)

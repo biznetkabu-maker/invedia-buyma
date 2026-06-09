@@ -75,23 +75,8 @@ def is_marketplace_brand_noise(brand: str) -> bool:
     return s in _MARKETPLACE_BRAND_NOISE
 
 
-def normalize_brand_name(brand: str) -> str:
-    """【VIPセール】PRADA / ♪直営アウトレット♪PRADA / プラダ☆キルティング 等を正規化。"""
-    tag_brand = _brand_from_bracket_tags(brand or "")
-    if tag_brand and not is_plausible_model_code(tag_brand):
-        return tag_brand
-
-    s = _BRACKET_TAG.sub(" ", brand or "").strip()
-    s = _DECORATIVE_CHARS.sub(" ", s)
-    s = re.sub(r"[◆・☆★]+", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    if not s:
-        return ""
-
-    ja_brand = _canonical_brand_from_japanese(brand or s)
-    if ja_brand:
-        return ja_brand
-
+def _extract_latin_brand_token(s: str) -> str:
+    """整形済み文字列からブランドらしい英字トークンを抽出する（無ければ空）。"""
     upper_tokens: list[str] = re.findall(r"\b([A-Z]{2,20})\b", s)
     if upper_tokens:
         return upper_tokens[-1]
@@ -109,6 +94,30 @@ def normalize_brand_name(brand: str) -> str:
                 continue
             if re.match(r"^[A-Za-z]{2,20}$", t):
                 return t.upper() if t.isupper() else t
+    return ""
+
+
+def normalize_brand_name(brand: str) -> str:
+    """【VIPセール】PRADA / ♪直営アウトレット♪PRADA / プラダ☆キルティング 等を正規化。"""
+    tag_brand = _brand_from_bracket_tags(brand or "")
+    if tag_brand and not is_plausible_model_code(tag_brand):
+        return tag_brand
+
+    s = _BRACKET_TAG.sub(" ", brand or "").strip()
+    s = _DECORATIVE_CHARS.sub(" ", s)
+    s = re.sub(r"[◆・☆★]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
+        return ""
+
+    ja_brand = _canonical_brand_from_japanese(brand or s)
+    if ja_brand:
+        return ja_brand
+
+    token = _extract_latin_brand_token(s)
+    if token:
+        return token
+
     result = s.split()[0] if s.split() else s
     if is_plausible_model_code(result):
         if tag_brand:
