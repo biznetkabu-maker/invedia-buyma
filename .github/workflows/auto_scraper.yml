@@ -61,6 +61,9 @@ jobs:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SPREADSHEET_ID:          ${{ secrets.SPREADSHEET_ID }}
 
+          # CI ログを構造化ログに統一（print ではなく logger 経由で出力）
+          BUYMA_CLI_LOG: "1"
+
           # ── 優先度ティア ──────────────────────────────────────────────
           # スケジュール実行時は自動判定 (auto)、手動実行時は入力値を使用
           PRIORITY_TIER: ${{ github.event.inputs.priority_tier || 'auto' }}

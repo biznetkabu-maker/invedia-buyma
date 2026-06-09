@@ -37,6 +37,7 @@ jobs:
           PRIORITY_TIER: "all"
           SCRAPER_HEADLESS: "true"
           SCRAPER_CONCURRENCY: "3"
+          BUYMA_CLI_LOG: "1"
         run: python -m lib.main
 
       - name: Notify failure via LINE

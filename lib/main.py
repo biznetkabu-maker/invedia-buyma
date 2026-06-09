@@ -27,6 +27,7 @@ from typing import Optional
 from lib.async_compat import run_sync
 from lib.config import Config
 from lib.forex import get_rates_for_sheet, update_sheet_exchange_rates
+from lib.intake_cli import cli_print
 from lib.multi_source import BestSourceFinder, BestSourceResult, style_id_consistent_with_buyma
 from lib.notification_manager import NotificationManager
 from lib.profit_calculator import ProfitBreakdown, try_calculate_profit
@@ -275,19 +276,19 @@ def print_summary(results: list[ProductResult], config: Config) -> None:
     separator = "=" * 60
     logger.info("巡回完了: %s | 対象:%d 出品中:%d 停止:%d 要確認:%d エラー:%d",
                 now, len(results), active, stopped, warning, errors)
-    print(f"\n{separator}")
-    print(f"  巡回完了: {now}")
-    print(f"  対象商品: {len(results)} 件")
-    print(f"  出品中  : {active} 件")
-    print(f"  停止中  : {stopped} 件")
-    print(f"  要確認  : {warning} 件")
-    print(f"  エラー  : {errors} 件")
-    print(separator)
-    print(f"  設定 — BUYMA手数料: {config.buyma_fee_rate:.0%} | "
+    cli_print(f"\n{separator}")
+    cli_print(f"  巡回完了: {now}")
+    cli_print(f"  対象商品: {len(results)} 件")
+    cli_print(f"  出品中  : {active} 件")
+    cli_print(f"  停止中  : {stopped} 件")
+    cli_print(f"  要確認  : {warning} 件")
+    cli_print(f"  エラー  : {errors} 件")
+    cli_print(separator)
+    cli_print(f"  設定 — BUYMA手数料: {config.buyma_fee_rate:.0%} | "
           f"関税: {config.customs_rate:.0%} | "
           f"送料: ¥{config.shipping_cost_jpy:,.0f} | "
           f"目標利益率: {config.target_profit_rate:.0%}")
-    print(separator)
+    cli_print(separator)
 
     for r in results:
         status_icon = {
@@ -305,13 +306,13 @@ def print_summary(results: list[ProductResult], config: Config) -> None:
             else ("取得失敗" if r.scrape and not r.scrape.success else "URLなし")
         )
 
-        print(
+        cli_print(
             f"  {status_icon} {r.updated.商品名[:20]:<20} | "
             f"現地価格: {scrape_price:<18} | "
             f"利益: {profit_str:<22} | {r.updated.在庫ステータス}"
         )
 
-    print(separator + "\n")
+    cli_print(separator + "\n")
 
 
 # ── メインフロー ─────────────────────────────────────────────────────────────
