@@ -15,39 +15,19 @@ from typing import Any, Optional
 from urllib.parse import urljoin
 
 from lib.async_compat import run_sync
+from lib.official_catalog.prada_catalog import (
+    _BASE,
+    _LOCALE_PATH,
+    _NAME_KEYS,
+    _PRADA_PDP_URL,
+    _PRICE_KEYS,
+    _PRODUCT_PATH,
+    _SKU_KEYS,
+    _URL_KEYS,
+    _XHR_URL_HINTS,
+)
 
 logger = logging.getLogger(__name__)
-
-_BASE = "https://www.prada.com"
-_LOCALE_PATH = "/jp/ja"
-
-# F12 でよく見られる API パス断片（docs/PRADA_OFFICIAL_F12.md と同期）
-_XHR_URL_HINTS = (
-    "/api/",
-    "/yTos/api/",
-    "search",
-    "Search",
-    "product",
-    "catalog",
-)
-
-_SKU_KEYS = frozenset({
-    "partnumber", "part_number", "mpn", "sku", "code", "productcode",
-    "productid", "styleid", "modelcode",
-})
-_URL_KEYS = frozenset({"url", "producturl", "seourl", "link", "canonicalurl", "pdpurl"})
-_NAME_KEYS = frozenset({"name", "productname", "title", "displayname", "shortdescription"})
-_PRICE_KEYS = frozenset({"price", "saleprice", "fullprice", "formattedprice", "value"})
-
-_PRODUCT_PATH = re.compile(
-    r"/(?:jp/ja|us/en|gb/en)?/p/[^?\s\"']+\.html",
-    re.I,
-)
-_MPN_IN_TEXT = re.compile(r"\b([A-Z]{2}\d{2}[A-Z]{2,})\b", re.I)
-_PRADA_PDP_URL = re.compile(
-    r"https?://(?:www\.)?prada\.com(?:/[a-z]{2}/[a-z]{2})?/p/[^\s\"'<>]+\.html",
-    re.I,
-)
 
 
 @dataclass(frozen=True)
