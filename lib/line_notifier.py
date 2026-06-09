@@ -25,6 +25,8 @@ from typing import Optional
 
 import requests
 
+from lib import http_client
+
 logger = logging.getLogger(__name__)
 
 _LINE_NOTIFY_ENDPOINT = "https://notify-api.line.me/api/notify"
@@ -123,7 +125,7 @@ class LINENotifyClient:
             data["stickerId"] = sticker_id
 
         try:
-            resp = requests.post(
+            resp = http_client.post(
                 _LINE_NOTIFY_ENDPOINT, headers=headers, data=data, timeout=15
             )
             resp.raise_for_status()
@@ -175,7 +177,7 @@ class LINEMessagingClient:
             "messages": [{"type": "text", "text": message[:5000]}],
         }
         try:
-            resp = requests.post(
+            resp = http_client.post(
                 _LINE_MESSAGING_API,
                 headers={
                     "Authorization": f"Bearer {self._token}",
@@ -211,7 +213,7 @@ class LINEMessagingClient:
         }
 
         try:
-            resp = requests.post(
+            resp = http_client.post(
                 _LINE_MESSAGING_API,
                 headers={
                     "Authorization": f"Bearer {self._token}",

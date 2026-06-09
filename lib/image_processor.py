@@ -14,7 +14,7 @@ BUYMA向け商品画像処理モジュール。
     class NanoBanana2Processor(BackgroundProcessor):
         def remove_background(self, image: Image.Image) -> Image.Image:
             # Nano Banana 2 APIを呼び出す
-            resp = requests.post(
+            resp = http_client.post(
                 "https://api.nanobanana2.example.com/remove-bg",
                 files={"image": image_to_bytes(image)},
                 headers={"Authorization": f"Bearer {self._api_key}"},
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-import requests
+from lib import http_client
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -109,7 +109,7 @@ class RemoveBgAPIProcessor(BackgroundProcessor):
     def remove_background(self, image: "Image.Image") -> "Image.Image":
         from PIL import Image
         img_bytes = _image_to_png_bytes(image)
-        resp = requests.post(
+        resp = http_client.post(
             "https://api.remove.bg/v1.0/removebg",
             files={"image_file": ("image.png", img_bytes, "image/png")},
             data={"size": "auto"},
@@ -143,7 +143,7 @@ class NanoBanana2Processor(BackgroundProcessor):
     def remove_background(self, image: "Image.Image") -> "Image.Image":
         from PIL import Image
         img_bytes = _image_to_png_bytes(image)
-        resp = requests.post(
+        resp = http_client.post(
             self.DEFAULT_ENDPOINT,
             files={"image": ("image.png", img_bytes, "image/png")},
             headers={"Authorization": f"Bearer {self._api_key}"},
@@ -430,7 +430,7 @@ def _download_image(url: str, timeout: int = 30) -> bytes:
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
     }
-    resp = requests.get(url, headers=headers, timeout=timeout)
+    resp = http_client.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
     return bytes(resp.content)
 
