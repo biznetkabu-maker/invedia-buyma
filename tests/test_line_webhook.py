@@ -21,7 +21,6 @@ os.environ.setdefault("LINE_CHANNEL_ACCESS_TOKEN", "test_token_for_ci")
 
 import lib.line_webhook as lw
 
-
 # ── ヘルパー ──────────────────────────────────────────────────────────────
 
 

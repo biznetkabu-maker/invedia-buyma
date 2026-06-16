@@ -33,7 +33,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from lib.async_compat import run_sync
 
@@ -55,8 +54,8 @@ class BUYMADemandSignal:
     product_name: str
     favorites_count: int        # 最上位商品のお気に入り数（0 = 未取得）
     listing_count: int          # 検索結果の出品数
-    min_price: Optional[int]    # 競合の最安値 JPY
-    max_price: Optional[int]    # 競合の最高値 JPY
+    min_price: int | None    # 競合の最安値 JPY
+    max_price: int | None    # 競合の最高値 JPY
     order_count: int            # 注文実績数合計（表示されている場合）
     has_cart: bool              # カート投入された商品が1件以上あるか
     search_url: str             # 調査に使用した検索URL
@@ -343,7 +342,7 @@ class BUYMADemandScraper:
 # ユーティリティ
 # ============================================================================
 
-def _extract_number(text: str) -> Optional[int]:
+def _extract_number(text: str) -> int | None:
     """テキストから最初の数値を抽出する。"""
     m = re.search(r"[\d,]+", text.replace("，", ","))
     if not m:
@@ -354,7 +353,7 @@ def _extract_number(text: str) -> Optional[int]:
         return None
 
 
-def _extract_number_with_keyword(text: str, keywords: list[str]) -> Optional[int]:
+def _extract_number_with_keyword(text: str, keywords: list[str]) -> int | None:
     """キーワードの近くにある数値を抽出する。"""
     text_lower = text.lower()
     for kw in keywords:
@@ -368,7 +367,7 @@ def _extract_number_with_keyword(text: str, keywords: list[str]) -> Optional[int
     return None
 
 
-def _extract_jpy_price(text: str) -> Optional[int]:
+def _extract_jpy_price(text: str) -> int | None:
     """テキストから最初の JPY 価格を抽出する（¥ または 円 付き）。"""
     prices = _extract_all_jpy_prices(text)
     return prices[0] if prices else None

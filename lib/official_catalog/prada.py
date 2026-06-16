@@ -11,7 +11,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 from lib.async_compat import run_sync
@@ -179,7 +179,7 @@ def _parse_html_product(html: str, mpn: str, page_url: str) -> list[_Candidate]:
     return out
 
 
-def _pick_best(candidates: list[_Candidate], mpn: str) -> Optional[_Candidate]:
+def _pick_best(candidates: list[_Candidate], mpn: str) -> _Candidate | None:
     if not candidates:
         return None
     for c in candidates:
@@ -476,7 +476,7 @@ def lookup_prada_official_diagnose(
     *,
     product_name: str = "",
     use_playwright: bool = True,
-) -> tuple[Optional[PradaOfficialMatch], PradaLookupDiagnostics]:
+) -> tuple[PradaOfficialMatch | None, PradaLookupDiagnostics]:
     mpn = (mpn or "").strip()
     diag = PradaLookupDiagnostics(mpn=mpn, playwright_ok=False)
     candidates: list[_Candidate] = []
@@ -546,7 +546,7 @@ def lookup_prada_official_sync(
     *,
     product_name: str = "",
     use_playwright: bool = True,
-) -> Optional[PradaOfficialMatch]:
+) -> PradaOfficialMatch | None:
     """MPN で prada.com を照合。ローカル Playwright 推奨。"""
     mpn = (mpn or "").strip()
     if not mpn:

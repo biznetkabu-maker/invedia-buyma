@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from playwright.async_api import Browser, BrowserContext, async_playwright
@@ -108,11 +108,11 @@ class PriceScraper:
         headless: bool = True,
         timeout_ms: int = 30_000,
         heavy_site_timeout_ms: int = _DEFAULT_HEAVY_TIMEOUT_MS,
-        user_agent: Optional[str] = None,
+        user_agent: str | None = None,
         max_retries: int = 2,
         extra_wait_ms: int = 2_000,
         use_stealth: bool = True,
-        proxy_rotator: Optional[ProxyRotator] = None,
+        proxy_rotator: ProxyRotator | None = None,
     ) -> None:
         self._headless = headless
         self._timeout_ms = timeout_ms
@@ -164,7 +164,7 @@ class PriceScraper:
     async def _goto_with_fallback(self, page, url: str) -> None:
         """重いサイトは domcontentloaded → commit の順でナビゲーションを試す。"""
         waits = self.navigation_wait_chain(url)
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for i, wait_until in enumerate(waits):
             try:
                 await page.goto(url, wait_until=wait_until)
@@ -186,7 +186,7 @@ class PriceScraper:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def parse_price(raw: str) -> tuple[Optional[float], Optional[str]]:
+    def parse_price(raw: str) -> tuple[float | None, str | None]:
         """価格文字列から (数値, 通貨コード) を抽出する。
 
         Examples:
@@ -216,7 +216,7 @@ class PriceScraper:
         from lib.logging_config import record_scrape
 
         strategy = self.get_strategy(url)
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         launch_args = LAUNCH_ARGS if self._use_stealth else []
         site = urlparse(url).netloc.lower()
         t0 = _time.monotonic()
@@ -365,7 +365,7 @@ class PriceScraper:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_error_result(url: str, exc: Optional[Exception]) -> ScrapedResult:
+    def _make_error_result(url: str, exc: Exception | None) -> ScrapedResult:
         return ScrapedResult(
             url=url,
             price=None,

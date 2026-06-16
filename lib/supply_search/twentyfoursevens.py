@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import quote_plus
 
 from lib.async_compat import run_sync
@@ -95,9 +95,7 @@ def is_valid_24s_product_url(url: str) -> bool:
     if not _24S_PRODUCT.match(path):
         return False
     slug = path.rsplit("/", 1)[-1]
-    if slug.count("-") < 1 and "_" not in slug:
-        return False
-    return True
+    return not (slug.count("-") < 1 and "_" not in slug)
 
 
 def build_24s_search_url(query: str) -> str:
@@ -121,9 +119,7 @@ def _brand_matches(brand: str, item_brand: str, item_name: str, path: str) -> bo
     token = b.split()[0] if b else ""
     if token and token in blob:
         return True
-    if "prada" in b and "prada" in blob:
-        return True
-    return False
+    return bool("prada" in b and "prada" in blob)
 
 
 def _sku_from_path(path: str) -> str:
@@ -310,7 +306,7 @@ async def search_24s_product_urls(
     style_id: str = "",
     product_name: str = "",
     wait_ms: int = 5000,
-    xhr_blobs: Optional[list[str]] = None,
+    xhr_blobs: list[str] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     search_url = build_24s_search_url(query)
     debug: dict[str, Any] = {

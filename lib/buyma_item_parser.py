@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from lib.async_compat import run_sync
 from lib.buyma_style_id import (
@@ -59,8 +58,8 @@ class BuymaItemInfo:
     buyma_url: str
     brand: str
     product_name: str
-    style_id: Optional[str] = None
-    price_jpy: Optional[int] = None
+    style_id: str | None = None
+    price_jpy: int | None = None
     raw_title: str = ""
 
 
@@ -186,7 +185,7 @@ def _split_brand_product(title: str, html: str) -> tuple[str, str]:
     return brand.strip(), product_name.strip() or title.strip() or "（商品名未取得）"
 
 
-def _extract_jpy_price(html: str) -> Optional[int]:
+def _extract_jpy_price(html: str) -> int | None:
     for m in _JPY_PRICE.finditer(html):
         raw = m.group(1) or m.group(2)
         if raw:
@@ -203,7 +202,7 @@ async def fetch_buyma_item_info(
     headless: bool = True,
     page_wait_ms: int = 2500,
     timeout_ms: int = 25_000,
-) -> Optional[BuymaItemInfo]:
+) -> BuymaItemInfo | None:
     """BUYMA 商品 URL を開き、商品情報を返す。"""
     if not is_buyma_item_url(url):
         logger.warning("not a BUYMA item URL: %s", url)
@@ -246,8 +245,8 @@ def fetch_buyma_item_info_sync(
     headless: bool = True,
     page_wait_ms: int = 2500,
     timeout_ms: int = 25_000,
-) -> Optional[BuymaItemInfo]:
-    info: Optional[BuymaItemInfo] = run_sync(
+) -> BuymaItemInfo | None:
+    info: BuymaItemInfo | None = run_sync(
         fetch_buyma_item_info(
             url,
             headless=headless,

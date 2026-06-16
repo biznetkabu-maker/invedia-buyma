@@ -22,7 +22,6 @@ import sys
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from lib.async_compat import run_sync
 from lib.config import Config
@@ -53,9 +52,9 @@ class ProductResult:
         self,
         original: ProductRecord,
         updated: ProductRecord,
-        scrape: Optional[ScrapedResult],
-        breakdown: Optional[ProfitBreakdown],
-        error: Optional[str] = None,
+        scrape: ScrapedResult | None,
+        breakdown: ProfitBreakdown | None,
+        error: str | None = None,
     ) -> None:
         self.original = original
         self.updated = updated
@@ -75,14 +74,12 @@ def is_scrapable_source_url(url: str) -> bool:
     u = url.strip().lower()
     if not u:
         return False
-    if "buyma.com" in u:
-        return False
-    return True
+    return "buyma.com" not in u
 
 
 def determine_status(
-    scrape: Optional[ScrapedResult],
-    breakdown: Optional[ProfitBreakdown],
+    scrape: ScrapedResult | None,
+    breakdown: ProfitBreakdown | None,
     target_profit_rate: float,
 ) -> str:
     """在庫・利益情報からステータス文字列を決定する。"""
@@ -113,7 +110,7 @@ STYLE_ID_WARNING = f"{STATUS_WARNING_PREFIX} (型番不一致)"
 
 def style_id_status_override(
     record: ProductRecord,
-    scrape: Optional[ScrapedResult],
+    scrape: ScrapedResult | None,
     current_status: str,
 ) -> str:
     """シートの型番と仕入先 style_id が食い違う場合、要確認ステータスを返す。"""
@@ -162,7 +159,7 @@ def _check_style_id_mismatches(results: list[ProductResult]) -> None:
 
 def process_product(
     record: ProductRecord,
-    scrape: Optional[ScrapedResult],
+    scrape: ScrapedResult | None,
     config: Config,
 ) -> ProductResult:
     """1商品の価格取得 → 利益計算 → ステータス判定 → ProductRecord 更新。
@@ -171,7 +168,7 @@ def process_product(
     """
     updated = replace(record)  # shallow copy
 
-    breakdown: Optional[ProfitBreakdown] = None
+    breakdown: ProfitBreakdown | None = None
 
     if scrape and scrape.success and scrape.price is not None:
         # 現地価格をスクレイピング結果で上書き
@@ -341,9 +338,7 @@ def _get_priority_products(
         except (ValueError, ZeroDivisionError):
             rate = 0.0
 
-        if tier == "high" and rate >= high_threshold:
-            result.append((i, r))
-        elif tier == "medium" and rate >= medium_threshold:
+        if tier == "high" and rate >= high_threshold or tier == "medium" and rate >= medium_threshold:
             result.append((i, r))
 
     return result
@@ -390,7 +385,7 @@ async def _load_sheet_data(
 async def _compare_candidate_urls(
     target_indexed: list[tuple[int, ProductRecord]],
     config: Config,
-    proxy_rotator: Optional[ProxyRotator],
+    proxy_rotator: ProxyRotator | None,
 ) -> list[tuple[int, ProductRecord]]:
     """候補URLを比較し、最安値の仕入先URLで target_indexed を更新する。"""
     indexed_with_candidates = [
@@ -446,7 +441,7 @@ async def _compare_candidate_urls(
 async def _execute_scraping(
     target_indexed: list[tuple[int, ProductRecord]],
     config: Config,
-    proxy_rotator: Optional[ProxyRotator],
+    proxy_rotator: ProxyRotator | None,
 ) -> dict[int, ScrapedResult]:
     """スクレイピング可能なURLを持つ商品を並列スクレイピングする。"""
     indexed_with_url = [
@@ -473,7 +468,7 @@ async def _execute_scraping(
     logger.info("  巡回開始 (並列数: %d)...", config.scraper_concurrency)
     scrape_results = await scraper.scrape_many_async(urls, concurrency=config.scraper_concurrency)
 
-    for (idx, _), result in zip(indexed_with_url, scrape_results):
+    for (idx, _), result in zip(indexed_with_url, scrape_results, strict=False):
         scrape_map[idx] = result
         if not result.success:
             logger.warning("    [%d] スクレイピング失敗: %s", idx, result.error)

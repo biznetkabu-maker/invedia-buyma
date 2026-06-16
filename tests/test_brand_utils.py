@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from lib.brand_utils import (
     brand_slug,
     is_marketplace_brand_noise,

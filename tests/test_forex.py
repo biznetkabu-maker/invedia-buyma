@@ -130,7 +130,7 @@ class TestFetchHelpers(unittest.TestCase):
 
 class TestGetAllRates(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)  # noqa: SIM115
         self._tmp.close()
         self._patch = patch.object(forex, "_CACHE_FILE", Path(self._tmp.name))
         self._patch.start()

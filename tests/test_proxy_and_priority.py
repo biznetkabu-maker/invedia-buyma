@@ -13,9 +13,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from lib.scraper.proxy import ProxyConfig, ProxyRotator
 from lib.scraper.engine import PriceScraper
-
+from lib.scraper.proxy import ProxyConfig, ProxyRotator
 
 # ---------------------------------------------------------------------------
 # ProxyConfig
@@ -194,7 +193,7 @@ class TestProxyHealthCheck(unittest.TestCase):
         mock_resp = unittest.mock.MagicMock()
         mock_resp.status_code = 200
 
-        with patch("requests.get", return_value=mock_resp) as mock_get:
+        with patch("requests.get", return_value=mock_resp):
             results = r.health_check(timeout=1.0)
 
         self.assertEqual(len(results), 2)

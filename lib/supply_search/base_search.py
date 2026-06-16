@@ -14,7 +14,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ def extract_product_urls_from_html(
     path_re: re.Pattern[str],
     base_url: str,
     *,
-    exclude_re: Optional[re.Pattern[str]] = None,
+    exclude_re: re.Pattern[str] | None = None,
 ) -> list[str]:
     """HTML から正規表現にマッチする商品 URL を抽出する。
 
@@ -331,8 +331,8 @@ def score_catalog_item_base(
     style_id: str,
     product_name: str,
     brand: str,
-    preowned_re: Optional[re.Pattern[str]] = None,
-    url_validator: Optional[Any] = None,
+    preowned_re: re.Pattern[str] | None = None,
+    url_validator: Any | None = None,
 ) -> int:
     """カタログアイテムの共通スコアリングロジック。
 
@@ -395,9 +395,9 @@ def rank_catalog_items(
     product_name: str = "",
     brand: str = "",
     limit: int = 5,
-    scorer: Optional[Any] = None,
-    preowned_re: Optional[re.Pattern[str]] = None,
-    url_validator: Optional[Any] = None,
+    scorer: Any | None = None,
+    preowned_re: re.Pattern[str] | None = None,
+    url_validator: Any | None = None,
 ) -> list[tuple[Any, int]]:
     """カタログアイテムをスコアでランキングする共通関数。"""
     if scorer:
@@ -423,8 +423,8 @@ def rank_merge_and_debug(
     brand: str,
     base_url: str,
     url_validator: Any,
-    scorer: Optional[Any] = None,
-    preowned_re: Optional[re.Pattern[str]] = None,
+    scorer: Any | None = None,
+    preowned_re: re.Pattern[str] | None = None,
     limit: int = 8,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """ランキング→マージ→デバッグ情報を一括で返す共通関数。"""

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 from urllib.parse import urlparse
 
 from lib.brand_utils import (  # noqa: F401  -- re-export
@@ -289,7 +288,7 @@ _SIMPLE_CATEGORY_RULES: tuple[tuple[tuple[str, ...], list[str]], ...] = (
 )
 
 
-def _bucket_extras(name_l: str) -> Optional[list[str]]:
+def _bucket_extras(name_l: str) -> list[str] | None:
     """バケット / ウィッカー系のカテゴリ語。該当しなければ None。"""
     wicker = _has(name_l, "ウィッカー", "wicker", "ラタン", "rattan")
     if not (_has(name_l, "バケット", "bucket bag", "bucket-bag", "bucket") or wicker):
@@ -531,9 +530,9 @@ def _append_style_id_queries(
 def build_supply_search_queries(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
     *,
-    raw_product_name: Optional[str] = None,
+    raw_product_name: str | None = None,
     official_english_name: str = "",
 ) -> list[str]:
     """仕入先検索に使うクエリを優先順で列挙する。"""
@@ -576,8 +575,8 @@ def build_supply_search_queries(
 
 def resolve_style_id_for_supply_search(
     product_name: str,
-    style_id: Optional[str] = None,
-) -> Optional[str]:
+    style_id: str | None = None,
+) -> str | None:
     """仕入先検索用。タイトル中の型番を優先し、長い数字のみの BUYMA ID は使わない。"""
     codes = extract_model_codes(product_name, style_id or "")
     if codes:
@@ -591,7 +590,7 @@ def resolve_style_id_for_supply_search(
 def best_demand_search_phrase(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
 ) -> str:
     """BUYMA 需要検索用の短いフレーズ。"""
     queries = build_supply_search_queries(brand, product_name, style_id)
@@ -601,7 +600,7 @@ def best_demand_search_phrase(
     return f"{brand} {cleaned}".strip() if cleaned else brand
 
 
-def sheet_style_id_value(product_name: str, style_id: Optional[str] = None) -> str:
+def sheet_style_id_value(product_name: str, style_id: str | None = None) -> str:
     """シートの型番列・照合用。モデル番号を優先。BUYMA 商品 ID のみの場合は空。"""
     resolved = resolve_style_id_for_supply_search(product_name, style_id)
     if resolved:
@@ -644,9 +643,7 @@ def is_valid_farfetch_product_url(url: str) -> bool:
     if any(not p for p in slug.split("-")):
         return False
     parts = [p for p in slug.split("-") if p]
-    if len(parts) < 2 or len(slug) < 8:
-        return False
-    return True
+    return not (len(parts) < 2 or len(slug) < 8)
 
 
 def url_matches_style_hint(style_id: str, url: str) -> bool:
@@ -789,9 +786,8 @@ def url_has_category_path_mismatch(product_name: str, url: str) -> bool:
         t = token.lower().replace("-", " ")
         return t in path or t in path_norm
 
-    if _requires_specific_path_match(product_name, positive):
-        if not any(path_has(hint) for hint in positive):
-            return True
+    if _requires_specific_path_match(product_name, positive) and not any(path_has(hint) for hint in positive):
+        return True
 
     if not negative:
         return False
@@ -799,9 +795,7 @@ def url_has_category_path_mismatch(product_name: str, url: str) -> bool:
     mismatches = [bad for bad in negative if path_has(bad)]
     if not mismatches:
         return False
-    if any(path_has(hint) for hint in positive):
-        return False
-    return True
+    return not any(path_has(hint) for hint in positive)
 
 
 def url_is_valid_supply_candidate(
@@ -829,11 +823,5 @@ def url_is_valid_supply_candidate(
     if "farfetch.com" in (url or "").lower():
         if not is_valid_farfetch_product_url(url):
             return False
-        if require_style_in_url and style_id and not url_matches_style_hint(
-            style_id, url
-        ):
-            return False
-        return True
-    if require_style_in_url and style_id and not url_matches_style_hint(style_id, url):
-        return False
-    return True
+        return not (require_style_in_url and style_id and not url_matches_style_hint(style_id, url))
+    return not (require_style_in_url and style_id and not url_matches_style_hint(style_id, url))

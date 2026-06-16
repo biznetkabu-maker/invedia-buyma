@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -103,7 +102,7 @@ def try_calculate_profit(
     customs_rate: float = 0.10,
     shipping_cost: float = 2000.0,
     buyma_fee_rate: float = 0.077,
-) -> Optional[ProfitBreakdown]:
+) -> ProfitBreakdown | None:
     """文字列入力から利益計算を試みる。変換失敗時は None を返す。"""
     try:
         local_price = float(local_price_str or 0)

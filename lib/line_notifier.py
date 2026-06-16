@@ -21,7 +21,6 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 
 import requests
 
@@ -48,8 +47,8 @@ class TreasureAlert:
     profit_rate: float
     source_url: str
     stock_status: str
-    image_url: Optional[str] = None
-    grade: Optional[str] = None   # PurchaseEvaluator のグレード
+    image_url: str | None = None
+    grade: str | None = None   # PurchaseEvaluator のグレード
 
     @property
     def profit_jpy_str(self) -> str:
@@ -64,7 +63,7 @@ class TreasureAlert:
 class NotificationResult:
     success: bool
     method: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # ============================================================================
@@ -97,10 +96,10 @@ class LINENotifyClient:
     def send(
         self,
         message: str,
-        image_url: Optional[str] = None,
-        image_thumbnail: Optional[str] = None,
-        sticker_package_id: Optional[int] = None,
-        sticker_id: Optional[int] = None,
+        image_url: str | None = None,
+        image_thumbnail: str | None = None,
+        sticker_package_id: int | None = None,
+        sticker_id: int | None = None,
     ) -> NotificationResult:
         """LINE Notify でメッセージを送信する。
 

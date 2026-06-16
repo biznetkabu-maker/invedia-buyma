@@ -13,7 +13,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import quote_plus
 
 from lib.async_compat import run_sync
@@ -118,10 +118,7 @@ def _parse_apollo_catalog(html: str) -> list[FarfetchCatalogItem]:
     descs = _APOLLO_DESC_RE.findall(html or "")
     if not paths:
         return []
-    if len(descs) == len(paths):
-        pairs = zip(descs, paths)
-    else:
-        pairs = (( "", p) for p in paths)
+    pairs = zip(descs, paths, strict=False) if len(descs) == len(paths) else (("", p) for p in paths)
     out: list[FarfetchCatalogItem] = []
     seen: set[str] = set()
     for desc, path in pairs:
@@ -195,9 +192,13 @@ def _score_item(
         h = hint.lower()
         if h in blob:
             score -= 50 if h == "wallet" else 40
-    if brand and brand.lower().replace(" ", "") not in blob.replace("-", ""):
-        if "prada" in brand.lower() and "prada" not in blob:
-            score -= 30
+    if (
+        brand
+        and brand.lower().replace(" ", "") not in blob.replace("-", "")
+        and "prada" in brand.lower()
+        and "prada" not in blob
+    ):
+        score -= 30
     if _PREOWNED_PATH.search(item.path) or _PREOWNED_PATH.search(item.name):
         score -= 35
     if "eyewear" in blob and not any(
@@ -255,7 +256,7 @@ async def search_farfetch_product_urls(
     style_id: str = "",
     product_name: str = "",
     wait_ms: int = 4500,
-    xhr_blobs: Optional[list[str]] = None,
+    xhr_blobs: list[str] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     """Playwright page で FARFETCH 検索し URL 候補を返す。"""
     search_url = build_farfetch_search_url(query)
@@ -355,9 +356,13 @@ async def _lookup_playwright(
                         text = await resp.text()
                         if len(text) < 80:
                             return
-                        if style_id and style_id.upper() not in text.upper():
-                            if "item-" not in text.lower() and "ProductCatalog" not in text:
-                                return
+                        if (
+                            style_id
+                            and style_id.upper() not in text.upper()
+                            and "item-" not in text.lower()
+                            and "ProductCatalog" not in text
+                        ):
+                            return
                         xhr_blobs.append(text)
                     except Exception:
                         logger.debug("Farfetch XHR parse error", exc_info=True)

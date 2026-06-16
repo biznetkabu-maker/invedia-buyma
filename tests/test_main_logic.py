@@ -12,10 +12,9 @@ import os
 import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from lib.config import Config
-from lib.profit_calculator import ProfitBreakdown, calculate_profit, try_calculate_profit
 from lib.main import (
     STATUS_ACTIVE,
     STATUS_STOPPED,
@@ -26,9 +25,9 @@ from lib.main import (
     print_summary,
     process_product,
 )
+from lib.profit_calculator import ProfitBreakdown, calculate_profit, try_calculate_profit
 from lib.scraper.models import ScrapedResult
 from lib.sheet_manager import ProductRecord
-
 
 # ---------------------------------------------------------------------------
 # テストヘルパー
@@ -295,9 +294,8 @@ class TestDetermineStatus(unittest.TestCase):
 class TestStyleIdStatusOverride(unittest.TestCase):
 
     def test_mismatch_sets_warning(self):
-        from lib.main import style_id_status_override, STATUS_ACTIVE, STYLE_ID_WARNING
-        from lib.scraper.models import ScrapedResult
-        from datetime import datetime, timezone
+
+        from lib.main import STATUS_ACTIVE, STYLE_ID_WARNING, style_id_status_override
 
         record = _make_record(型番="ARC58-BLK")
         scrape = _make_scrape(stock_status="in_stock")
@@ -306,7 +304,7 @@ class TestStyleIdStatusOverride(unittest.TestCase):
         self.assertEqual(status, STYLE_ID_WARNING)
 
     def test_match_keeps_status(self):
-        from lib.main import style_id_status_override, STATUS_ACTIVE
+        from lib.main import STATUS_ACTIVE, style_id_status_override
         record = _make_record(型番="ARC58-BLK")
         scrape = _make_scrape(stock_status="in_stock")
         scrape = replace(scrape, style_id="arc58/blk")
@@ -314,7 +312,7 @@ class TestStyleIdStatusOverride(unittest.TestCase):
         self.assertEqual(status, STATUS_ACTIVE)
 
     def test_no_sheet_style_id_skips(self):
-        from lib.main import style_id_status_override, STATUS_ACTIVE
+        from lib.main import STATUS_ACTIVE, style_id_status_override
         record = _make_record(型番="")
         scrape = _make_scrape(stock_status="in_stock")
         scrape = replace(scrape, style_id="X")
@@ -324,7 +322,7 @@ class TestStyleIdStatusOverride(unittest.TestCase):
         )
 
     def test_stopped_priority_over_style_mismatch(self):
-        from lib.main import style_id_status_override, STATUS_STOPPED
+        from lib.main import STATUS_STOPPED, style_id_status_override
         record = _make_record(型番="ARC58")
         scrape = _make_scrape(stock_status="out_of_stock")
         scrape = replace(scrape, style_id="WRONG")
@@ -388,7 +386,7 @@ class TestProcessProduct(unittest.TestCase):
     def test_original_record_not_mutated(self):
         record = _make_record(現地価格="800", 在庫ステータス="出品中")
         scrape = _make_scrape(price=900.0, stock_status="out_of_stock")
-        result = process_product(record, scrape, self.config)
+        process_product(record, scrape, self.config)
         # dataclasses.replace() を使っているので元は変更されない
         self.assertEqual(record.現地価格, "800")
         self.assertEqual(record.在庫ステータス, "出品中")

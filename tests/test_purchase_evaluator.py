@@ -15,7 +15,6 @@ from dataclasses import replace
 
 from lib.purchase_evaluator import EvaluationInput, PurchaseEvaluator, PurchaseScore
 
-
 # ---------------------------------------------------------------------------
 # テストフィクスチャ: 全項目 A グレード相当の基準値
 # ---------------------------------------------------------------------------

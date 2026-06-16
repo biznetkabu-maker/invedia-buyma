@@ -90,9 +90,7 @@ def is_hard_excluded_product_name(name: str) -> bool:
     text = name or ""
     if _HARD_EXCLUDE_AUTO.search(text):
         return True
-    if _RE_NYLON_POUCH.search(text):
-        return True
-    return False
+    return bool(_RE_NYLON_POUCH.search(text))
 
 
 def is_eyewear_product_name(name: str) -> bool:

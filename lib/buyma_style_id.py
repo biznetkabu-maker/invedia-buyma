@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 from urllib.parse import urlparse
 
 from lib.async_compat import run_sync
@@ -96,7 +95,7 @@ def extract_style_id_candidates_from_html(html: str) -> list[str]:
     return unique
 
 
-def extract_primary_style_id_from_buyma_html(html: str) -> Optional[str]:
+def extract_primary_style_id_from_buyma_html(html: str) -> str | None:
     """HTML から最も信頼できそうな1件の Style ID を返す。"""
     cands = extract_style_id_candidates_from_html(html)
     if not cands:
@@ -113,9 +112,7 @@ def _is_plausible_code(code: str) -> bool:
     if not re.match(r"^[A-Za-z0-9][A-Za-z0-9\-/.]+$", code):
         return False
     low = code.lower()
-    if low.startswith("http") or "://" in code:
-        return False
-    return True
+    return not (low.startswith("http") or "://" in code)
 
 
 async def fetch_buyma_style_id_from_url(
@@ -124,7 +121,7 @@ async def fetch_buyma_style_id_from_url(
     headless: bool = True,
     page_wait_ms: int = 2500,
     timeout_ms: int = 25_000,
-) -> Optional[str]:
+) -> str | None:
     """BUYMA 商品URLを開き、型番を抽出する（Playwright）。"""
     if not is_buyma_item_url(url):
         logger.debug("skip style_id fetch: not a BUYMA item URL: %s", url)
@@ -164,9 +161,9 @@ def fetch_buyma_style_id_from_url_sync(
     headless: bool = True,
     page_wait_ms: int = 2500,
     timeout_ms: int = 25_000,
-) -> Optional[str]:
+) -> str | None:
     """同期ラッパー。"""
-    result: Optional[str] = run_sync(
+    result: str | None = run_sync(
         fetch_buyma_style_id_from_url(
             url,
             headless=headless,

@@ -9,7 +9,6 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import quote_plus, urlparse
 
 from lib.async_compat import run_sync
@@ -129,9 +128,9 @@ def _auto_site_defs() -> list[SiteDefinition]:
 def build_style_search_urls(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
     *,
-    search_query: Optional[str] = None,
+    search_query: str | None = None,
 ) -> list[tuple[SiteDefinition, str]]:
     """検索クエリから各サイトの検索 URL を生成する。"""
     q = (search_query or "").strip()
@@ -238,15 +237,15 @@ async def _search_sites_for_query(
 async def discover_supply_urls_async(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
     *,
-    raw_product_name: Optional[str] = None,
+    raw_product_name: str | None = None,
     official_english_name: str = "",
     headless: bool = True,
     max_sites: int = 5,
-    timeout_ms: Optional[int] = None,
+    timeout_ms: int | None = None,
     page_wait_ms: int = 3000,
-    log_lines: Optional[list[str]] = None,
+    log_lines: list[str] | None = None,
 ) -> list[SupplyUrlCandidate]:
     """複数仕入先を並行探索して商品 URL 候補を返す（非同期）。"""
     from playwright.async_api import async_playwright
@@ -365,13 +364,13 @@ def _candidate_from_product_url(url: str) -> SupplyUrlCandidate:
 def discover_supply_urls_funnel(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
     *,
-    preset_urls: Optional[list[str]] = None,
-    raw_product_name: Optional[str] = None,
+    preset_urls: list[str] | None = None,
+    raw_product_name: str | None = None,
     official_english_name: str = "",
     use_site_search: bool = True,
-    log_lines: Optional[list[str]] = None,
+    log_lines: list[str] | None = None,
     **kwargs: object,
 ) -> list[SupplyUrlCandidate]:
     """漏斗用: 候補URLs → 型番 site: 検索 → Playwright サイト内検索の順。"""
@@ -434,15 +433,15 @@ def discover_supply_urls_funnel(
 def discover_supply_urls_sync(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
     *,
-    raw_product_name: Optional[str] = None,
+    raw_product_name: str | None = None,
     official_english_name: str = "",
     headless: bool = True,
     max_sites: int = 5,
-    timeout_ms: Optional[int] = None,
+    timeout_ms: int | None = None,
     page_wait_ms: int = 3000,
-    log_lines: Optional[list[str]] = None,
+    log_lines: list[str] | None = None,
 ) -> list[SupplyUrlCandidate]:
     """discover_supply_urls_async の同期ラッパー。"""
     return run_sync(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple
 
 # 長いプレフィックスを先に照合するため降順に並べる
 _CURRENCY_MAP: list[tuple[str, str]] = sorted(
@@ -31,7 +30,7 @@ _CURRENCY_MAP: list[tuple[str, str]] = sorted(
 )
 
 
-def parse_price_string(raw: str) -> Tuple[Optional[float], Optional[str]]:
+def parse_price_string(raw: str) -> tuple[float | None, str | None]:
     """価格文字列から数値と通貨コードを抽出する。
 
     Examples:
@@ -51,7 +50,7 @@ def parse_price_string(raw: str) -> Tuple[Optional[float], Optional[str]]:
 
     text = raw.strip()
     text = re.sub(r"^none\s*", "", text, flags=re.I)
-    currency: Optional[str] = None
+    currency: str | None = None
 
     # 先頭の通貨記号を除去
     for symbol, code in _CURRENCY_MAP:

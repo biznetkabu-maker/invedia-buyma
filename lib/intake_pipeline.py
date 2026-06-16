@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from lib.intake_cli import cli_print
 from lib.purchase_evaluator import (
@@ -28,7 +28,7 @@ def evaluate(
     brand: str, product_name: str, category: str,
     model_year: int, source_url: str, source_price: float,
     currency: str, exchange_rate: float, buyma_price: float,
-    demand_signal: Optional["BUYMADemandSignal"] = None,
+    demand_signal: BUYMADemandSignal | None = None,
 ) -> PurchaseScore:
     """保守的なデフォルト値で PurchaseEvaluator を実行する。
 
@@ -74,9 +74,9 @@ def build_record(
     source_url: str, source_price: float,
     exchange_rate: float, buyma_price: float,
     candidate_urls: list[str],
-    score: "PurchaseScore",
+    score: PurchaseScore,
     buyma_style_id: str = "",
-    match_score: Optional["MatchScore"] = None,
+    match_score: MatchScore | None = None,
 ) -> ProductRecord:
     """ProductRecord を構築する。"""
     profit_str = str(round(score.profit_breakdown.profit)) if score.profit_breakdown else ""
@@ -98,7 +98,7 @@ def build_record(
     )
 
 
-def _build_manager() -> tuple[Optional[SheetManager], list[str]]:
+def _build_manager() -> tuple[SheetManager | None, list[str]]:
     """設定を検証して SheetManager を生成する。未設定なら (None, エラー一覧)。"""
     from lib.config import Config
     config = Config.from_env()
@@ -133,7 +133,7 @@ def write_to_sheet(record: ProductRecord) -> None:
         cli_print("  商品情報（手動でシートに追加してください）:")
         for col, val in zip(["商品名", "ブランド", "型番", "仕入れURL", "現地価格",
                               "為替", "BUYMA販売価格", "在庫ステータス", "利益額"],
-                             record.to_row()):
+                             record.to_row(), strict=False):
             if val:
                 cli_print(f"    {col}: {val}")
 

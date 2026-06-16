@@ -50,9 +50,7 @@ def _is_product_path(url_val: str) -> bool:
         return True
     if "/shop/product/" in u and re.search(r"/\d+$", u):
         return True
-    if re.search(r"/(?:en-[a-z]{2}/)?[a-z0-9-]+_[a-z0-9]+$", u, re.I):
-        return True
-    return False
+    return bool(re.search(r"/(?:en-[a-z]{2}/)?[a-z0-9-]+_[a-z0-9]+$", u, re.I))
 
 
 def _extract_dict_fields(obj: dict, base_url: str) -> tuple[str, str, str]:

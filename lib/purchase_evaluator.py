@@ -28,7 +28,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 from lib.profit_calculator import ProfitBreakdown, calculate_profit
 
@@ -130,7 +129,7 @@ class EvaluationInput:
     is_realtime_stock: bool
     packaging_quality: str
 
-    buyma_rank: Optional[int]
+    buyma_rank: int | None
     sns_trending: bool
     japan_soldout: bool
     japan_exclusive: bool
@@ -195,7 +194,7 @@ class PurchaseScore:
     grade: str
     grade_label: str
 
-    profit_breakdown: Optional[ProfitBreakdown]
+    profit_breakdown: ProfitBreakdown | None
     effective_profit_rate: float     # FX バッファ込みの実質利益率
 
     critical_issues: list[str]
@@ -317,7 +316,7 @@ class PurchaseEvaluator:
 
         # 利益計算（FXバッファ込み）
         effective_rate = inp.exchange_rate * (1 + inp.fx_buffer_rate)
-        profit_breakdown: Optional[ProfitBreakdown] = None
+        profit_breakdown: ProfitBreakdown | None = None
         effective_profit_rate = 0.0
         try:
             profit_breakdown = calculate_profit(

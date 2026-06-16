@@ -74,7 +74,7 @@ class TestDiscoverFunnelCache(unittest.TestCase):
             "https://www.farfetch.com/jp/shopping/women/"
             "prada-small-saffiano-leather-wallet-item-36404881.aspx"
         )
-        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)  # noqa: SIM115
         tmp.close()
         orig = cache_mod._DEFAULT_CACHE_FILE
         cache_mod._DEFAULT_CACHE_FILE = Path(tmp.name)

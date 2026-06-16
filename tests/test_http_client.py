@@ -53,9 +53,8 @@ class TestHttpClientRetry:
         with patch(
             "requests.get",
             side_effect=requests.ConnectionError("boom"),
-        ) as m, patch("time.sleep"):
-            with pytest.raises(requests.ConnectionError):
-                http_client.get("https://example.com")
+        ) as m, patch("time.sleep"), pytest.raises(requests.ConnectionError):
+            http_client.get("https://example.com")
         assert m.call_count == 4
 
     def test_connection_error_then_success(self):

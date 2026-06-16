@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
-import tempfile
 import unittest
 from unittest.mock import MagicMock
 

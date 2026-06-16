@@ -14,7 +14,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import quote_plus
 
 from lib.async_compat import run_sync
@@ -86,9 +86,7 @@ def is_valid_ssense_product_url(url: str) -> bool:
     path = urlparse(url).path.rstrip("/")
     if not _SSENSE_PRODUCT.match(path):
         return False
-    if re.search(r"/(?:search|cart|login|account)(?:/|$)", path, re.I):
-        return False
-    return True
+    return not re.search(r"/(?:search|cart|login|account)(?:/|$)", path, re.I)
 
 
 def build_ssense_search_url(query: str, *, department: str = "women") -> str:
@@ -109,9 +107,7 @@ def _brand_matches(brand: str, item_brand: str, item_name: str, path: str) -> bo
     token = b.split()[0] if b else ""
     if token and token in blob:
         return True
-    if "prada" in b and "prada" in blob:
-        return True
-    return False
+    return bool("prada" in b and "prada" in blob)
 
 
 def _parse_json_ld_products(html: str) -> list[SsenseCatalogItem]:
@@ -326,7 +322,7 @@ async def search_ssense_product_urls(
     style_id: str = "",
     product_name: str = "",
     wait_ms: int = 5000,
-    xhr_blobs: Optional[list[str]] = None,
+    xhr_blobs: list[str] | None = None,
     department: str = "women",
 ) -> tuple[list[str], dict[str, Any]]:
     search_url = build_ssense_search_url(query, department=department)

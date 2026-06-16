@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import unittest
 
+from lib.supply_search_utils import url_is_valid_supply_candidate
 from lib.supply_site_search import (
     build_site_queries,
     extract_urls_from_ddg_html,
 )
-from lib.supply_search_utils import url_is_valid_supply_candidate
 
 
 class TestSupplySiteSearch(unittest.TestCase):

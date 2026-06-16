@@ -15,7 +15,7 @@ import lib.supply_url_cache as cache_mod
 
 class TestSupplyUrlCache(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)  # noqa: SIM115
         self.tmp.close()
         self._orig_file = cache_mod._DEFAULT_CACHE_FILE
         cache_mod._DEFAULT_CACHE_FILE = Path(self.tmp.name)

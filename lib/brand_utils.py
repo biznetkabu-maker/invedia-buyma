@@ -6,7 +6,6 @@ supply_search_utils.py から分離。
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from lib.style_id_utils import is_plausible_model_code
 
@@ -33,7 +32,7 @@ _BRAND_JA_ALIASES: dict[str, str] = {
 _MARKETPLACE_BRAND_NOISE = frozenset({"buyma", "バイマ"})
 
 
-def _canonical_brand_from_japanese(text: str) -> Optional[str]:
+def _canonical_brand_from_japanese(text: str) -> str | None:
     """プラダ☆キルティング 等から PRADA を抽出。"""
     s = (text or "").strip()
     if not s:
@@ -128,7 +127,7 @@ def normalize_brand_name(brand: str) -> str:
     return result
 
 
-def resolve_merchandise_brand(*sources: Optional[str]) -> str:
+def resolve_merchandise_brand(*sources: str | None) -> str:
     """複数ソースから最初の有効な商品ブランドを選ぶ（BUYMA 等は除外）。"""
     for source in sources:
         s = (source or "").strip()
@@ -142,9 +141,12 @@ def resolve_merchandise_brand(*sources: Optional[str]) -> str:
         first = s.split(None, 1)[0]
         if first:
             b = normalize_brand_name(first)
-            if b and not is_marketplace_brand_noise(b):
-                if re.match(r"^[A-Za-z]{2,20}$", b) or _canonical_brand_from_japanese(first):
-                    return b
+            if (
+                b
+                and not is_marketplace_brand_noise(b)
+                and (re.match(r"^[A-Za-z]{2,20}$", b) or _canonical_brand_from_japanese(first))
+            ):
+                return b
         if " " not in s:
             b = normalize_brand_name(s)
             if b and not is_marketplace_brand_noise(b):

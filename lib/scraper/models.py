@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 
 @dataclass
@@ -24,14 +23,14 @@ class ScrapedResult:
     """
 
     url: str
-    price: Optional[float]
-    currency: Optional[str]
+    price: float | None
+    currency: str | None
     stock_status: str
-    raw_price: Optional[str]
-    style_id: Optional[str] = None
+    raw_price: str | None
+    style_id: str | None = None
     scraped_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     success: bool = True
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def is_available(self) -> bool:

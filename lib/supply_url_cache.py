@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from lib.style_id_utils import normalize_style_id
@@ -85,7 +85,7 @@ def lookup_supply_urls(
     brand: str,
     mpn: str,
     *,
-    log_lines: Optional[list[str]] = None,
+    log_lines: list[str] | None = None,
 ) -> list[str]:
     """キャッシュから検証済み URL を返す。無効・期限切れは []。"""
     if not _cache_enabled():
