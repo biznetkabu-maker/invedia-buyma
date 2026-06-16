@@ -101,6 +101,7 @@ def filter_product_urls(
     *,
     brand: str = "",
 ) -> list[str]:
+    """リンク群から指定ドメインの商品ページ URL を抽出・上限 limit 件返す。"""
     out: list[str] = []
     seen: set[str] = set()
     brand_hits: list[str] = []
@@ -247,6 +248,7 @@ async def discover_supply_urls_async(
     page_wait_ms: int = 3000,
     log_lines: Optional[list[str]] = None,
 ) -> list[SupplyUrlCandidate]:
+    """複数仕入先を並行探索して商品 URL 候補を返す（非同期）。"""
     from playwright.async_api import async_playwright
 
     from lib.scraper.stealth import (
@@ -442,6 +444,7 @@ def discover_supply_urls_sync(
     page_wait_ms: int = 3000,
     log_lines: Optional[list[str]] = None,
 ) -> list[SupplyUrlCandidate]:
+    """discover_supply_urls_async の同期ラッパー。"""
     return run_sync(
         discover_supply_urls_async(
             brand, product_name, style_id,

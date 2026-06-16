@@ -166,6 +166,7 @@ class BestSourceFinder:
         max_retries: int = 1,
         proxy_rotator: Optional[ProxyRotator] = None,
     ) -> None:
+        """ヘッドレス設定・タイムアウト・リトライ回数・プロキシで初期化する。"""
         self._headless = headless
         self._timeout_ms = timeout_ms
         self._max_retries = max_retries

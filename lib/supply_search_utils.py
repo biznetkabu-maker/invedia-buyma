@@ -208,6 +208,7 @@ _POUCH_ACCESSORY_MARKERS = (
 
 
 def is_footwear_product_name(product_name: str) -> bool:
+    """商品名が靴類（スニーカー・サンダル等）かを判定する。"""
     name_l = (product_name or "").lower()
     return any(k in name_l for k in _FOOTWEAR_KEYS)
 
@@ -241,6 +242,7 @@ def line_name_search_tokens(product_name: str, official_english_name: str = "") 
 
 
 def footwear_search_extras(product_name: str) -> list[str]:
+    """靴類の種別に応じた追加検索キーワードを返す。"""
     name_l = (product_name or "").lower()
     if any(k in name_l for k in ("スニーカー", "sneaker", "trainer")):
         return ["sneaker", "sneakers", "shoes"]
@@ -255,6 +257,7 @@ def footwear_search_extras(product_name: str) -> list[str]:
 
 
 def is_fragment_case_product_name(product_name: str) -> bool:
+    """商品名がフラグメントケース・カードケース類かを判定する。"""
     name_l = (product_name or "").lower()
     return any(
         k in name_l

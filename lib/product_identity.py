@@ -36,10 +36,12 @@ class VariantKey:
 
     @property
     def has_match_ref(self) -> bool:
+        """照合に使える型番があるかを返す。"""
         return bool((self.style_id or "").strip())
 
     @property
     def match_ref(self) -> str:
+        """照合用の型番文字列（前後空白除去）を返す。"""
         return (self.style_id or "").strip()
 
     @classmethod
@@ -89,6 +91,7 @@ class VariantKey:
 
     @classmethod
     def from_record(cls, record: "ProductRecord") -> "VariantKey":
+        """ProductRecord から VariantKey を生成する。"""
         return cls.resolve(
             brand=record.ブランド,
             product_name=record.商品名,
@@ -109,6 +112,7 @@ class MatchScore:
         return self.grade in _GRADES_AUTO_OK
 
     def format_console(self) -> str:
+        """同一性スコアをコンソール表示用の複数行文字列に整形する。"""
         lines = [f"  【同一性スコア】 {self.grade}"]
         if self.identity_note:
             lines.append(f"    同一性: {self.identity_note}")

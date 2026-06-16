@@ -135,6 +135,7 @@ class SheetManager:
         worksheet_name: str,
         credentials_path: str = "credentials.json",
     ) -> None:
+        """スプレッドシートID・ワークシート名・認証情報パスで初期化する。"""
         self.spreadsheet_id = spreadsheet_id
         self.worksheet_name = worksheet_name
         self._credentials_path = credentials_path

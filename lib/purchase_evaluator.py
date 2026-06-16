@@ -299,6 +299,7 @@ class PurchaseEvaluator:
     """
 
     def __init__(self, buyma_max_days: int = 18) -> None:
+        """BUYMA 許容最大配送日数を指定して初期化する。"""
         self._buyma_max_days = buyma_max_days
 
     # ─────────────────────────────────────────────────────────────────────

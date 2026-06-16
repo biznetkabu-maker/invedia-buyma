@@ -51,6 +51,7 @@ _NUMERIC_BUYMA_ID = re.compile(r"^\d{7,}$")
 
 
 def weekly_auto_limit() -> int:
+    """週次の自動取込上限件数を返す（環境変数優先、不正値は既定値）。"""
     try:
         return max(1, int(os.environ.get(ENV_WEEKLY_LIMIT, str(DEFAULT_WEEKLY_LIMIT))))
     except ValueError:
@@ -58,6 +59,7 @@ def weekly_auto_limit() -> int:
 
 
 def funnel_enabled() -> bool:
+    """ファネル（段階的絞り込み）が有効かを返す。"""
     return os.environ.get(ENV_FUNNEL, "1").strip().lower() not in (
         "0",
         "false",
@@ -66,6 +68,7 @@ def funnel_enabled() -> bool:
 
 
 def require_style_id() -> bool:
+    """出品に型番（style_id）を必須とするかを返す。"""
     return os.environ.get(ENV_REQUIRE_STYLE, "1").strip().lower() not in (
         "0",
         "false",
@@ -74,6 +77,7 @@ def require_style_id() -> bool:
 
 
 def official_prada_enabled() -> bool:
+    """PRADA 公式カタログ照合が有効かを返す。"""
     return os.environ.get(ENV_OFFICIAL_PRADA, "1").strip().lower() not in (
         "0",
         "false",
@@ -99,6 +103,7 @@ def is_eyewear_product_name(name: str) -> bool:
 
 
 def rescue_hint() -> str:
+    """自動探索失敗時にユーザへ提示する復旧手順メッセージを返す。"""
     return (
         "シートの「候補URLs」に仕入先の新品 URL を貼り、"
         "py intake.py --auto-sheet --limit 1 で再実行"
