@@ -1,32 +1,32 @@
-from .ssense import SSENSEStrategy
-from .tessabit import TESSABITStrategy
-from .generic import GenericStrategy
+from .biffi import BIFFIStrategy
 
 # 定番
 from .farfetch import FARFETCHStrategy
-from .matchesfashion import MATCHESFASHIONStrategy
-from .mytheresa import MYTHERESAStrategy
-
-# デパート
-from .selfridges import SELFRIDGESStrategy
-from .saks import SAKSStrategy
+from .generic import GenericStrategy
+from .giglio import GIGLIOStrategy
 from .harrods import HARRODSStrategy
 from .harveynichols import HARVEYNICHOLSStrategy
-from .neimanmarcus import NEIMANMARCUSStrategy
 
 # 欧州セレクト
 from .luisaviaroma import LUISAVIAROMAStrategy
-from .giglio import GIGLIOStrategy
-from .biffi import BIFFIStrategy
+from .matchesfashion import MATCHESFASHIONStrategy
+from .mrporter import MRPORTERStrategy
+from .mytheresa import MYTHERESAStrategy
+from .neimanmarcus import NEIMANMARCUSStrategy
 
 # YNAP グループ（多ブランドEC）
 from .netaporter import NETAPORTERStrategy
-from .mrporter import MRPORTERStrategy
-from .yoox import YOOXStrategy
+from .saks import SAKSStrategy
+
+# デパート
+from .selfridges import SELFRIDGESStrategy
+from .ssense import SSENSEStrategy
+from .tessabit import TESSABITStrategy
 from .theoutnet import THEOUTNETStrategy
 
 # LVMH グループ
 from .twentyfoursevens import TWENTYFOURSStrategy
+from .yoox import YOOXStrategy
 
 __all__ = [
     "SSENSEStrategy",

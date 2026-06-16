@@ -13,20 +13,18 @@ MYTHERESA は Bot 検知が強く、クラウド headless では HTML が空に�
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import quote_plus, urljoin
 
+from lib.async_compat import run_sync
 from lib.supply_search.json_walk import (
     SearchHit,
     collect_hits_from_json_text,
-    normalize_style_token,
 )
-from lib.supply_search_utils import infer_supply_category_hints
 
 logger = logging.getLogger(__name__)
 
@@ -243,37 +241,11 @@ def _score_item(
     product_name: str,
     brand: str,
 ) -> int:
-    score = 30
-    blob = f"{item.name} {item.path}".lower()
-    sid = (style_id or "").strip()
-    if sid:
-        compact = normalize_style_token(sid)
-        if compact and compact in normalize_style_token(blob):
-            score += 100
-    pos, neg = infer_supply_category_hints(product_name)
-    for hint in pos:
-        h = hint.lower().replace("-", " ")
-        if h in blob or h.replace(" ", "-") in item.path.lower():
-            score += 25
-        if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag")):
-            score += 25
-        if hint == "wallet" and "wallet" in blob:
-            score += 25
-        if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
-            score += 20
-    for hint in neg:
-        if hint.lower() in blob:
-            score -= 40
-    if brand and brand.lower().replace(" ", "") not in blob.replace("-", ""):
-        if "prada" in brand.lower() and "prada" not in blob:
-            score -= 20
-    if _PREOWNED_PATH.search(item.path) or _PREOWNED_PATH.search(item.name):
-        score -= 35
-    if not is_valid_mytheresa_product_url(item.url):
-        score -= 100
-    if item.source == "json_ld_itemlist":
-        score += 5
-    return score
+    from lib.supply_search.base_search import score_catalog_item_base
+    return score_catalog_item_base(
+        item, style_id=style_id, product_name=product_name, brand=brand,
+        preowned_re=_PREOWNED_PATH, url_validator=is_valid_mytheresa_product_url,
+    )
 
 
 def rank_mytheresa_catalog_items(
@@ -284,12 +256,11 @@ def rank_mytheresa_catalog_items(
     brand: str = "",
     limit: int = 5,
 ) -> list[tuple[MytheresaCatalogItem, int]]:
-    scored = [
-        (item, _score_item(item, style_id=style_id, product_name=product_name, brand=brand))
-        for item in items
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:limit]
+    from lib.supply_search.base_search import rank_catalog_items
+    return rank_catalog_items(
+        items, style_id=style_id, product_name=product_name,
+        brand=brand, limit=limit, scorer=_score_item,
+    )
 
 
 def merge_search_hits(
@@ -300,31 +271,12 @@ def merge_search_hits(
     product_name: str,
     brand: str,
 ) -> list[str]:
-    urls: list[str] = []
-    seen: set[str] = set()
-
-    ranked = rank_mytheresa_catalog_items(
-        catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
+    from lib.supply_search.base_search import rank_merge_and_debug
+    urls, _ = rank_merge_and_debug(
+        catalog, xhr_hits, style_id=style_id, product_name=product_name,
+        brand=brand, base_url=_BASE, url_validator=is_valid_mytheresa_product_url,
+        scorer=_score_item,
     )
-    for item, score in ranked:
-        if score < 0:
-            continue
-        u = item.url.split("?")[0]
-        if u not in seen and is_valid_mytheresa_product_url(u):
-            seen.add(u)
-            urls.append(u)
-
-    for hit in sorted(xhr_hits, key=lambda h: h.score, reverse=True):
-        u = (hit.url or "").split("?")[0]
-        if not u or u in seen:
-            continue
-        if not u.startswith("http"):
-            u = urljoin(_BASE, u)
-        if not is_valid_mytheresa_product_url(u):
-            continue
-        seen.add(u)
-        urls.append(u)
-
     return urls
 
 
@@ -388,21 +340,12 @@ async def search_mytheresa_product_urls(
     return urls, debug
 
 
-@dataclass
-class MytheresaSearchDiagnostics:
-    query: str
-    style_id: str
-    playwright_ok: bool
-    playwright_error: str = ""
-    search_url: str = ""
-    bot_blocked: bool = False
-    json_ld_items: int = 0
-    html_link_items: int = 0
-    next_data_items: int = 0
-    xhr_blobs: int = 0
-    candidate_count: int = 0
-    top_candidates: list[dict[str, Any]] = field(default_factory=list)
-    product_urls: list[str] = field(default_factory=list)
+from lib.supply_search.base_search import (
+    SearchDiagnostics as MytheresaSearchDiagnostics,
+)
+from lib.supply_search.base_search import (
+    run_playwright_search,
+)
 
 
 async def _lookup_playwright(
@@ -412,73 +355,20 @@ async def _lookup_playwright(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], MytheresaSearchDiagnostics]:
-    from playwright.async_api import async_playwright
-    from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
+    async def _search(page: Any, *, xhr_blobs: list[str], **_kw: Any) -> tuple[list[str], dict[str, Any]]:
+        return await search_mytheresa_product_urls(
+            page, query, brand=brand, style_id=style_id,
+            product_name=product_name or query, xhr_blobs=xhr_blobs,
+        )
 
     diag = MytheresaSearchDiagnostics(
-        query=query,
-        style_id=style_id,
-        playwright_ok=False,
+        query=query, style_id=style_id, playwright_ok=False,
         search_url=build_mytheresa_search_url(query),
     )
-    xhr_blobs: list[str] = []
-
-    try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
-            try:
-                ctx_opts = stealth_context_options()
-                ctx_opts["locale"] = "en-US"
-                ctx = await browser.new_context(**ctx_opts)
-                page = await ctx.new_page()
-                await apply_stealth_scripts(page)
-
-                async def on_response(resp) -> None:
-                    u = resp.url
-                    if "mytheresa" not in u.lower():
-                        return
-                    if not any(h in u.lower() for h in _XHR_URL_HINTS):
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                    try:
-                        if resp.status != 200:
-                            return
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct and "graphql" not in u.lower():
-                            return
-                        text = await resp.text()
-                        if len(text) < 80:
-                            return
-                        xhr_blobs.append(text)
-                    except Exception:
-                        pass
-
-                page.on("response", on_response)
-                urls, dbg = await search_mytheresa_product_urls(
-                    page,
-                    query,
-                    brand=brand,
-                    style_id=style_id,
-                    product_name=product_name or query,
-                    xhr_blobs=xhr_blobs,
-                )
-                diag.playwright_ok = True
-                diag.bot_blocked = dbg["bot_blocked"]
-                diag.json_ld_items = dbg["json_ld_items"]
-                diag.html_link_items = dbg["html_link_items"]
-                diag.next_data_items = dbg["next_data_items"]
-                diag.xhr_blobs = len(xhr_blobs)
-                diag.top_candidates = dbg["top_scores"]
-                diag.product_urls = urls
-                diag.candidate_count = len(urls)
-                return urls, diag
-            finally:
-                await browser.close()
-    except Exception as e:
-        diag.playwright_error = str(e)
-        logger.debug("mytheresa search playwright failed: %s", e)
-        return [], diag
+    return await run_playwright_search(
+        "mytheresa", _XHR_URL_HINTS, _search,
+        diag.search_url, diag,
+    )
 
 
 def lookup_mytheresa_search_diagnose(
@@ -488,7 +378,7 @@ def lookup_mytheresa_search_diagnose(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], MytheresaSearchDiagnostics]:
-    return asyncio.run(
+    return run_sync(
         _lookup_playwright(
             query, brand=brand, style_id=style_id, product_name=product_name,
         )

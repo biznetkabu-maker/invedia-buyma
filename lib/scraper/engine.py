@@ -6,14 +6,16 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright, Browser, BrowserContext
+from playwright.async_api import Browser, BrowserContext, async_playwright
+
+from lib.async_compat import run_sync
 
 from .base import ScraperStrategy
 from .models import ScrapedResult
-from .proxy import ProxyConfig, ProxyRotator
+from .proxy import ProxyRotator
 from .stealth import (
     LAUNCH_ARGS,
     apply_stealth_scripts,
@@ -209,9 +211,15 @@ class PriceScraper:
 
     async def scrape_async(self, url: str) -> ScrapedResult:
         """1件のURLを非同期でスクレイピングする。"""
+        import time as _time
+
+        from lib.logging_config import record_scrape
+
         strategy = self.get_strategy(url)
         last_error: Optional[Exception] = None
         launch_args = LAUNCH_ARGS if self._use_stealth else []
+        site = urlparse(url).netloc.lower()
+        t0 = _time.monotonic()
 
         async with async_playwright() as pw:
             browser: Browser = await pw.chromium.launch(
@@ -223,6 +231,7 @@ class PriceScraper:
                     try:
                         result = await self._scrape_with_browser(url, browser, strategy)
                         if result.success:
+                            record_scrape(site, success=True, response_time=_time.monotonic() - t0)
                             return result
                         last_error = Exception(result.error or "unknown error")
                     except Exception as e:
@@ -238,7 +247,43 @@ class PriceScraper:
             finally:
                 await browser.close()
 
+        record_scrape(site, success=False, response_time=_time.monotonic() - t0)
         return self._make_error_result(url, last_error)
+
+    def _build_context_options(self, url: str) -> dict[str, Any]:
+        ua = self._user_agent or (random_user_agent() if self._use_stealth else None)
+        ctx_opts: dict[str, Any] = (
+            stealth_context_options(user_agent=ua)
+            if self._use_stealth
+            else {"user_agent": ua or "", "locale": "en-US"}
+        )
+        if "farfetch.com/jp" in url.lower():
+            ctx_opts = {**ctx_opts, "locale": "ja-JP"}
+        proxy = self._proxy_rotator.next() if self._proxy_rotator else None
+        if proxy:
+            ctx_opts["proxy"] = proxy.to_playwright_proxy()
+            logger.debug("Using proxy: %r for %s", proxy, url)
+        return ctx_opts
+
+    @staticmethod
+    def _build_result_from_extracted(
+        url: str, extracted: dict[str, Any],
+    ) -> ScrapedResult:
+        from .price_sanity import infer_currency_from_url, normalize_raw_price_string
+
+        style_id = extracted.get("style_id")
+        raw_price = normalize_raw_price_string(extracted.get("price") or "")
+        price_val, currency = parse_price_string(raw_price)
+        if currency is None:
+            currency = extracted.get("currency")
+        if currency is None or str(currency).lower() == "none":
+            currency = infer_currency_from_url(url, raw_price)
+        return ScrapedResult(
+            url=url, price=price_val, currency=currency,
+            stock_status=extracted.get("stock_status", "unknown"),
+            raw_price=raw_price or None, style_id=style_id,
+            scraped_at=datetime.now(timezone.utc), success=True,
+        )
 
     async def _scrape_with_browser(
         self,
@@ -246,31 +291,12 @@ class PriceScraper:
         browser: Browser,
         strategy: ScraperStrategy,
     ) -> ScrapedResult:
-        ua = self._user_agent or (random_user_agent() if self._use_stealth else None)
-
-        ctx_opts = (
-            stealth_context_options(user_agent=ua)
-            if self._use_stealth
-            else {"user_agent": ua or "", "locale": "en-US"}
-        )
-        if "farfetch.com/jp" in url.lower():
-            ctx_opts = {**ctx_opts, "locale": "ja-JP"}
-
-        # プロキシを取得して追加
-        proxy = self._proxy_rotator.next() if self._proxy_rotator else None
-        if proxy:
-            ctx_opts["proxy"] = proxy.to_playwright_proxy()
-            logger.debug("Using proxy: %r for %s", proxy, url)
-
+        ctx_opts = self._build_context_options(url)
         context: BrowserContext = await browser.new_context(**ctx_opts)
-
-        # 画像・フォントをブロック（速度向上 + トラッキング回避）
         await context.route(
             "**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ttf,otf,eot}",
             lambda route: route.abort(),
         )
-
-        # 重いサイトはページタイムアウトを延長する
         effective_timeout = (
             self._heavy_site_timeout_ms
             if self.is_heavy_site(url)
@@ -280,10 +306,8 @@ class PriceScraper:
         try:
             page = await context.new_page()
             page.set_default_timeout(effective_timeout)
-
             if self._use_stealth:
                 await apply_stealth_scripts(page)
-
             await self._goto_with_fallback(page, url)
 
             extra_ms = self._extra_wait_ms
@@ -298,31 +322,10 @@ class PriceScraper:
                 await page.wait_for_timeout(wait)
 
             extracted = await strategy.extract(page)
-
-            style_id = extracted.get("style_id")
-            if not style_id:
+            if not extracted.get("style_id"):
                 from .json_ld_style_id import extract_primary_style_id_from_json_ld
-                style_id = await extract_primary_style_id_from_json_ld(page)
-
-            from .price_sanity import infer_currency_from_url, normalize_raw_price_string
-
-            raw_price = normalize_raw_price_string(extracted.get("price") or "")
-            price_val, currency = parse_price_string(raw_price)
-            if currency is None:
-                currency = extracted.get("currency")
-            if currency is None or str(currency).lower() == "none":
-                currency = infer_currency_from_url(url, raw_price)
-
-            return ScrapedResult(
-                url=url,
-                price=price_val,
-                currency=currency,
-                stock_status=extracted.get("stock_status", "unknown"),
-                raw_price=raw_price or None,
-                style_id=style_id,
-                scraped_at=datetime.now(timezone.utc),
-                success=True,
-            )
+                extracted["style_id"] = await extract_primary_style_id_from_json_ld(page)
+            return self._build_result_from_extracted(url, extracted)
         except Exception as e:
             logger.error("Extraction error for %s: %s", url, e, exc_info=True)
             return self._make_error_result(url, e)
@@ -352,10 +355,10 @@ class PriceScraper:
     # ------------------------------------------------------------------
 
     def scrape(self, url: str) -> ScrapedResult:
-        return asyncio.run(self.scrape_async(url))
+        return run_sync(self.scrape_async(url))
 
     def scrape_many(self, urls: list[str], concurrency: int = 3) -> list[ScrapedResult]:
-        return asyncio.run(self.scrape_many_async(urls, concurrency=concurrency))
+        return run_sync(self.scrape_many_async(urls, concurrency=concurrency))
 
     # ------------------------------------------------------------------
     # ユーティリティ

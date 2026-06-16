@@ -1,7 +1,7 @@
 """
 SheetManager のユニットテスト。
 
-gspread / oauth2client への実際のネットワーク接続は行わず、
+gspread / google-auth への実際のネットワーク接続は行わず、
 unittest.mock を使って全外部依存をスタブ化します。
 """
 
@@ -340,6 +340,64 @@ class TestEnsureHeader(unittest.TestCase):
         manager._worksheet = ws
         manager.ensure_header()
         ws.append_row.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# SheetManager.validate_record / sanitize_record
+# ---------------------------------------------------------------------------
+
+class TestValidateRecord(unittest.TestCase):
+
+    def test_valid_record(self):
+        rec = ProductRecord(商品名="CELINE トリオ", 現地価格="500", 為替="155", BUYMA販売価格="90000")
+        self.assertEqual(SheetManager.validate_record(rec), [])
+
+    def test_empty_product_name(self):
+        rec = ProductRecord(商品名="", 現地価格="500")
+        errs = SheetManager.validate_record(rec)
+        self.assertTrue(any("商品名" in e for e in errs))
+
+    def test_non_numeric_price(self):
+        rec = ProductRecord(商品名="X", 現地価格="abc")
+        errs = SheetManager.validate_record(rec)
+        self.assertTrue(any("数値ではありません" in e for e in errs))
+
+    def test_negative_price(self):
+        rec = ProductRecord(商品名="X", 現地価格="-100")
+        errs = SheetManager.validate_record(rec)
+        self.assertTrue(any("負の値" in e for e in errs))
+
+    def test_invalid_url(self):
+        rec = ProductRecord(商品名="X", 仕入れURL="ftp://bad")
+        errs = SheetManager.validate_record(rec)
+        self.assertTrue(any("URL" in e for e in errs))
+
+    def test_invalid_status(self):
+        rec = ProductRecord(商品名="X", 在庫ステータス="bad_status")
+        errs = SheetManager.validate_record(rec)
+        self.assertTrue(any("ステータス" in e for e in errs))
+
+    def test_currency_symbol_accepted(self):
+        rec = ProductRecord(商品名="X", 現地価格="¥90,000")
+        self.assertEqual(SheetManager.validate_record(rec), [])
+
+    def test_negative_profit_allowed(self):
+        rec = ProductRecord(商品名="X", 利益額="-5000")
+        self.assertEqual(SheetManager.validate_record(rec), [])
+
+
+class TestSanitizeRecord(unittest.TestCase):
+
+    def test_strips_whitespace(self):
+        rec = ProductRecord(商品名="  CELINE  ", ブランド=" CELINE ")
+        result = SheetManager.sanitize_record(rec)
+        self.assertEqual(result.商品名, "CELINE")
+        self.assertEqual(result.ブランド, "CELINE")
+
+    def test_truncates_price_reason(self):
+        rec = ProductRecord(商品名="X", 価格根拠="x" * 1000)
+        result = SheetManager.sanitize_record(rec)
+        self.assertEqual(len(result.価格根拠), 500)
 
 
 if __name__ == "__main__":

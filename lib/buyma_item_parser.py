@@ -6,12 +6,12 @@ intake.py --auto-buyma / --auto-sheet で使用。
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from dataclasses import dataclass
 from typing import Optional
 
+from lib.async_compat import run_sync
 from lib.buyma_style_id import (
     extract_primary_style_id_from_buyma_html,
     is_buyma_item_url,
@@ -128,12 +128,25 @@ def _clean_title(s: str) -> str:
 _BRACKET_TAG = re.compile(r"【[^】]*】|\[[^\]]*\]")
 
 
-def _split_brand_product(title: str, html: str) -> tuple[str, str]:
+def _normalize_json_brand(json_brand: str) -> str:
+    """JSON 由来のブランド名が妥当ならば正規化して返す（型番・ノイズは空）。"""
     from lib.supply_search_utils import (
-        _brand_from_bracket_tags,
         is_marketplace_brand_noise,
         is_plausible_model_code,
         normalize_brand_name,
+    )
+
+    if not json_brand or is_plausible_model_code(json_brand):
+        return ""
+    if is_marketplace_brand_noise(json_brand):
+        return ""
+    return str(normalize_brand_name(json_brand))
+
+
+def _split_brand_product(title: str, html: str) -> tuple[str, str]:
+    from lib.supply_search_utils import (
+        _brand_from_bracket_tags,
+        is_plausible_model_code,
     )
 
     raw_title = (title or "").strip()
@@ -146,9 +159,8 @@ def _split_brand_product(title: str, html: str) -> tuple[str, str]:
     m = _BRAND_JSON.search(html)
     if m:
         json_brand = (m.group(1) or m.group(2) or "").strip()
-    if not brand and json_brand and not is_plausible_model_code(json_brand):
-        if not is_marketplace_brand_noise(json_brand):
-            brand = normalize_brand_name(json_brand)
+    if not brand:
+        brand = _normalize_json_brand(json_brand)
 
     product_name = title
     if brand and title.lower().startswith(brand.lower()):
@@ -164,10 +176,7 @@ def _split_brand_product(title: str, html: str) -> tuple[str, str]:
 
     if brand and is_plausible_model_code(brand):
         product_name = f"{brand} {product_name}".strip()
-        brand = _brand_from_bracket_tags(raw_title) or ""
-        if not brand and json_brand and not is_plausible_model_code(json_brand):
-            if not is_marketplace_brand_noise(json_brand):
-                brand = normalize_brand_name(json_brand)
+        brand = _brand_from_bracket_tags(raw_title) or _normalize_json_brand(json_brand)
 
     if not product_name:
         json_name = _extract_json_product_name(html)
@@ -201,6 +210,7 @@ async def fetch_buyma_item_info(
         return None
 
     from playwright.async_api import async_playwright
+
     from lib.scraper.stealth import (
         LAUNCH_ARGS,
         apply_stealth_scripts,
@@ -230,5 +240,19 @@ async def fetch_buyma_item_info(
         return None
 
 
-def fetch_buyma_item_info_sync(url: str, **kwargs: object) -> Optional[BuymaItemInfo]:
-    return asyncio.run(fetch_buyma_item_info(url, **kwargs))  # type: ignore[arg-type]
+def fetch_buyma_item_info_sync(
+    url: str,
+    *,
+    headless: bool = True,
+    page_wait_ms: int = 2500,
+    timeout_ms: int = 25_000,
+) -> Optional[BuymaItemInfo]:
+    info: Optional[BuymaItemInfo] = run_sync(
+        fetch_buyma_item_info(
+            url,
+            headless=headless,
+            page_wait_ms=page_wait_ms,
+            timeout_ms=timeout_ms,
+        )
+    )
+    return info

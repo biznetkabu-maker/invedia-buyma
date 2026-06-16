@@ -3,8 +3,9 @@ name: 自動価格・在庫巡回
 on:
   # ─── スケジュール実行 ────────────────────────────────────────────────────
   schedule:
-    # 高利益率商品 (≥20%) のみ — 毎時実行 (UTC)
-    - cron: "0 * * * *"
+    # 高利益率商品 (≥20%) のみ — 4時間ごと実行 (UTC)
+    # 商品数が少ない初期段階では毎時実行は過剰なため Actions コストを抑制。
+    - cron: "0 */4 * * *"
 
   # ─── 手動実行（GitHub UI の "Run workflow" ボタン）────────────────────
   workflow_dispatch:
@@ -59,6 +60,9 @@ jobs:
           # ── 必須 Secrets ──────────────────────────────────────────────
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SPREADSHEET_ID:          ${{ secrets.SPREADSHEET_ID }}
+
+          # CI ログを構造化ログに統一（print ではなく logger 経由で出力）
+          BUYMA_CLI_LOG: "1"
 
           # ── 優先度ティア ──────────────────────────────────────────────
           # スケジュール実行時は自動判定 (auto)、手動実行時は入力値を使用
@@ -120,6 +124,19 @@ jobs:
           echo "|------|---|" >> $GITHUB_STEP_SUMMARY
           echo "| 優先度ティア | \`${PRIORITY_TIER}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| トリガー | \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      - name: 失敗時に LINE で障害通知
+        if: failure()
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: |
+          if [ -n "$LINE_CHANNEL_ACCESS_TOKEN" ] && [ -n "$LINE_USER_ID" ]; then
+            curl -s -X POST https://api.line.me/v2/bot/message/push \
+              -H "Authorization: Bearer $LINE_CHANNEL_ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"to\":\"$LINE_USER_ID\",\"messages\":[{\"type\":\"text\",\"text\":\"⚠️ BUYMA 自動巡回が失敗しました\\n\\nワークフロー: ${{ github.workflow }}\\n実行: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\\n\\n確認してください。\"}]}"
+          fi
 
   # ══════════════════════════════════════════════════════════════════════════
   # Job 2: 接続テスト（手動のみ）

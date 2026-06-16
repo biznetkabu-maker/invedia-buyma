@@ -53,13 +53,17 @@ GitHub Actions での運用では Secrets / Variables に以下を設定する:
 
 from __future__ import annotations
 
+import atexit
 import json
+import logging
 import os
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -166,9 +170,23 @@ class Config:
             tmp = tempfile.NamedTemporaryFile(
                 mode="w", suffix=".json", delete=False
             )
+            # 秘密鍵を含むため、所有者のみ読み書き可能に制限する。
+            try:
+                os.chmod(tmp.name, 0o600)
+            except OSError:
+                logger.debug("認証一時ファイルの権限設定に失敗: %s", tmp.name)
             json.dump(json.loads(json_str), tmp)
             tmp.flush()
             tmp.close()
+            # 異常終了時にも一時ファイルを確実に削除
+            def _cleanup_tmp(path: str = tmp.name) -> None:
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    logger.debug("認証一時ファイルの削除に失敗: %s", path)
+            atexit.register(_cleanup_tmp)
             return tmp.name, tmp.name
 
         # ローカル開発用: ファイルパスを直接使用
@@ -177,8 +195,14 @@ class Config:
 
     def cleanup(self) -> None:
         """一時ファイルを削除する（終了時に呼ぶ）。"""
-        if self._tmp_credentials and os.path.exists(self._tmp_credentials):
+        if not self._tmp_credentials:
+            return
+        try:
             os.unlink(self._tmp_credentials)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.debug("認証一時ファイルの削除に失敗: %s", self._tmp_credentials)
 
     def effective_priority_tier(self) -> str:
         """実行する優先度ティアを返す。

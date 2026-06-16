@@ -16,11 +16,22 @@ output_csv/
 logs/
 data/deepl_cache.json
 .supply_url_cache.json
+.forex_cache.json
+.notified_treasures.json
+scraper_unknown_history.json
 processed_images/
 
 # BUYMA 秘密情報
 credentials.json
+spreadsheet_id.txt
 worksheet_name.txt
+
+# カバレッジレポート
+htmlcov/
+.coverage
 
 # Windows ショートカット（リポジトリ外の bat へのリンク等）
 *.lnk
+
+# Python build artifacts
+*.egg-info/

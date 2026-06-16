@@ -38,7 +38,7 @@ import hmac
 import json
 import logging
 import os
-from base64 import b64decode, b64encode
+from base64 import b64encode
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +192,7 @@ def handle_message(event: dict) -> None:
             reply_text(reply_token, "⛔ このコマンドは管理者のみ実行できます。")
 
     else:
-        reply_text(reply_token, f"コマンドが認識できません。「ヘルプ」と送ってください。")
+        reply_text(reply_token, "コマンドが認識できません。「ヘルプ」と送ってください。")
 
 
 _HELP_TEXT = """🤖 BUYMAアシスタント コマンド一覧
@@ -349,7 +349,7 @@ def _to_float(v: str) -> float:
 def create_app():
     """Flask アプリを生成する。"""
     try:
-        from flask import Flask, request, abort
+        from flask import Flask, abort, request
     except ImportError:
         raise ImportError("Flask が未インストールです: pip install flask")
 
@@ -384,7 +384,9 @@ def create_app():
 # ============================================================================
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from lib.logging_config import setup_logging
+
+    setup_logging(level=logging.INFO)
 
     if not _CHANNEL_SECRET or not _ACCESS_TOKEN:
         print(
@@ -398,4 +400,5 @@ if __name__ == "__main__":
     app = create_app()
     port = int(os.getenv("PORT", 5000))
     print(f"🚀 Webhook サーバー起動: http://localhost:{port}/webhook")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    host = os.getenv("WEBHOOK_HOST", "127.0.0.1")
+    app.run(host=host, port=port, debug=False)

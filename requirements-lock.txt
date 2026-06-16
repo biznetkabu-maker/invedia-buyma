@@ -1,0 +1,31 @@
+# 再現性のための依存ロックファイル（ランタイム依存の固定版）
+#
+# pyproject.toml の dependencies を解決した結果を記録したものです。
+# 本番 / CI で同一バージョンを使うには:
+#   pip install -r requirements-lock.txt
+#
+# 更新方法（依存を変えたとき）:
+#   pip install -e . && pip freeze で各バージョンを確認して反映
+#
+# dev/browser の追加依存は pyproject.toml の optional-dependencies を参照。
+
+beautifulsoup4==4.14.3
+certifi==2026.5.20
+cffi==2.0.0
+charset-normalizer==3.4.7
+cryptography==44.0.3
+google-auth==2.53.0
+google-auth-oauthlib==1.4.0
+gspread==6.2.1
+idna==3.10
+oauthlib==3.3.1
+pyasn1==0.6.3
+pyasn1-modules==0.4.2
+pycparser==3.0
+requests==2.34.2
+requests-oauthlib==2.0.0
+rsa==4.9.1
+six==1.17.0
+soupsieve==2.8.4
+typing-extensions==4.12.2
+urllib3==2.7.0

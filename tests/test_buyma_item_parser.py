@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
+from unittest.mock import patch
 
-from lib.buyma_item_parser import parse_buyma_item_from_html
+from lib.buyma_item_parser import (
+    _extract_jpy_price,
+    _extract_title,
+    fetch_buyma_item_info,
+    fetch_buyma_item_info_sync,
+    parse_buyma_item_from_html,
+)
 
 
 class TestParseBuymaItem(unittest.TestCase):
@@ -100,6 +108,44 @@ class TestParseBuymaItem(unittest.TestCase):
         self.assertEqual(info.brand, "PRADA")
         self.assertIn("SPEEDROCK", info.product_name)
         self.assertEqual(info.style_id, "2NE067")
+
+    def test_empty_html_uses_fallback_name(self) -> None:
+        info = parse_buyma_item_from_html("", buyma_url="https://www.buyma.com/items/1/")
+        self.assertEqual(info.product_name, "（商品名未取得）")
+        self.assertIsNone(info.price_jpy)
+
+
+class TestExtractHelpers(unittest.TestCase):
+    def test_extract_title_empty(self):
+        self.assertEqual(_extract_title("<html></html>"), "")
+
+    def test_extract_title_tag_strips_buyma_suffix(self):
+        self.assertEqual(_extract_title("<title>FOO BAR | BUYMA</title>"), "FOO BAR")
+
+    def test_extract_jpy_price_yen_suffix(self):
+        self.assertEqual(_extract_jpy_price("価格 198,000 円"), 198000)
+
+    def test_extract_jpy_price_jpy_prefix(self):
+        self.assertEqual(_extract_jpy_price("JPY 250,000"), 250000)
+
+    def test_extract_jpy_price_none(self):
+        self.assertIsNone(_extract_jpy_price("価格未定"))
+
+
+class TestFetchItemInfo(unittest.TestCase):
+    def test_fetch_rejects_non_item_url(self):
+        result = asyncio.run(fetch_buyma_item_info("https://example.com/x"))
+        self.assertIsNone(result)
+
+    def test_sync_wrapper_returns_async_result(self):
+        sentinel = object()
+
+        async def _fake(url, **kwargs):
+            return sentinel
+
+        with patch("lib.buyma_item_parser.fetch_buyma_item_info", side_effect=_fake):
+            result = fetch_buyma_item_info_sync("https://www.buyma.com/items/1/")
+        self.assertIs(result, sentinel)
 
 
 if __name__ == "__main__":

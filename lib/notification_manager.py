@@ -19,16 +19,14 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 from lib.line_notifier import LINENotifier, TreasureAlert
-from lib.sheet_manager import ProductRecord
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +237,7 @@ class NotificationManager:
             return 0
 
         grade_order = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
-        threshold_order = grade_order.get(self._auto_list_grade, 1)
+        threshold_order: int = grade_order.get(self._auto_list_grade or "B", 1)
 
         target_alerts = [
             a for a in alerts
@@ -261,8 +259,8 @@ class NotificationManager:
         if not listings:
             return 0
 
-        import asyncio
-        listing_results = asyncio.run(
+        from lib.async_compat import run_sync
+        listing_results = run_sync(
             automator.post_batch_async(listings, interval_sec=8.0)
         )
         success_count = sum(1 for r in listing_results if r.success)
@@ -278,15 +276,12 @@ def _cache_key(alert: TreasureAlert) -> str:
     return f"{alert.brand}::{alert.product_name}::{alert.source_url}"
 
 
-def _load_notified_cache() -> dict:
-    try:
-        return json.loads(_NOTIFIED_CACHE_FILE.read_text())
-    except Exception:
-        return {}
+def _load_notified_cache() -> dict[str, Any]:
+    from lib.file_lock import atomic_json_read
+    data: dict[str, Any] = atomic_json_read(_NOTIFIED_CACHE_FILE, default={})
+    return data
 
 
 def _save_notified_cache(cache: dict) -> None:
-    try:
-        _NOTIFIED_CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
-    except Exception as e:
-        logger.warning("通知キャッシュの保存失敗: %s", e)
+    from lib.file_lock import atomic_json_write
+    atomic_json_write(_NOTIFIED_CACHE_FILE, cache)

@@ -30,10 +30,12 @@ import asyncio
 import logging
 import os
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from lib.async_compat import run_sync
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ class ListingData:
     buyma_price: float
     size: str = ""
     color: str = ""
-    image_paths: list[str] = None
+    image_paths: list[str] = field(default_factory=list)
     category: str = ""
     condition: str = "新品"
     shipping_from: str = "海外"
@@ -115,7 +117,7 @@ class ListingResult:
     url: Optional[str] = None
     item_id: Optional[str] = None
     error: Optional[str] = None
-    listed_at: datetime = None
+    listed_at: Optional[datetime] = None
 
     def __post_init__(self):
         if self.listed_at is None:
@@ -184,6 +186,7 @@ class BUYMAAutomator:
             )
 
         from playwright.async_api import async_playwright
+
         from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
         last_error: Optional[Exception] = None
@@ -241,7 +244,8 @@ class BUYMAAutomator:
 
     def post_listing(self, listing: ListingData) -> ListingResult:
         """出品（同期版）。"""
-        return asyncio.run(self.post_listing_async(listing))
+        result: ListingResult = run_sync(self.post_listing_async(listing))
+        return result
 
     async def post_batch_async(
         self, listings: list[ListingData], interval_sec: float = 5.0
@@ -262,7 +266,8 @@ class BUYMAAutomator:
         self, listings: list[ListingData], interval_sec: float = 5.0
     ) -> list[ListingResult]:
         """出品バッチ処理（同期版）。"""
-        return asyncio.run(self.post_batch_async(listings, interval_sec))
+        results: list[ListingResult] = run_sync(self.post_batch_async(listings, interval_sec))
+        return results
 
     # ------------------------------------------------------------------
     # 内部処理
@@ -633,10 +638,11 @@ def _random_type_delay() -> int:
     return random.randint(80, 200)
 
 
-def _load_session_cookies() -> list[dict]:
+def _load_session_cookies() -> list[dict[str, object]]:
     import json
     try:
-        return json.loads(_SESSION_COOKIE_FILE.read_text())
+        data: list[dict[str, object]] = json.loads(_SESSION_COOKIE_FILE.read_text())
+        return data
     except Exception:
         return []
 
@@ -645,5 +651,5 @@ def _save_session_cookies(cookies: list[dict]) -> None:
     import json
     try:
         _SESSION_COOKIE_FILE.write_text(json.dumps(cookies))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("buyma_automator: %s", exc)

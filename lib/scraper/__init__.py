@@ -9,15 +9,24 @@
     print(result)
 """
 
+from .base import ScraperStrategy
 from .engine import PriceScraper
 from .models import ScrapedResult
-from .base import ScraperStrategy
 from .strategies import (
-    SSENSEStrategy, TESSABITStrategy, GenericStrategy,
-    FARFETCHStrategy, MATCHESFASHIONStrategy, MYTHERESAStrategy,
-    SELFRIDGESStrategy, SAKSStrategy, HARRODSStrategy,
-    LUISAVIAROMAStrategy, GIGLIOStrategy, BIFFIStrategy,
-    YOOXStrategy, THEOUTNETStrategy,
+    BIFFIStrategy,
+    FARFETCHStrategy,
+    GenericStrategy,
+    GIGLIOStrategy,
+    HARRODSStrategy,
+    LUISAVIAROMAStrategy,
+    MATCHESFASHIONStrategy,
+    MYTHERESAStrategy,
+    SAKSStrategy,
+    SELFRIDGESStrategy,
+    SSENSEStrategy,
+    TESSABITStrategy,
+    THEOUTNETStrategy,
+    YOOXStrategy,
 )
 
 __all__ = [

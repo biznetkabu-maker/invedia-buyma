@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import quote_plus, urlparse
 
+from lib.async_compat import run_sync
 from lib.product_finder import ALL_SITES, SiteDefinition
 from lib.supply_search_utils import (
     build_supply_search_queries,
@@ -167,8 +168,6 @@ async def _search_sites_for_query(
         domain_key = site.domain
         wait_until = "commit" if domain_key == "farfetch.com" else "domcontentloaded"
         wait_ms = page_wait_ms + (1500 if domain_key == "farfetch.com" else 0)
-        last_err: Optional[Exception] = None
-
         for attempt in range(2):
             try:
                 await page.goto(
@@ -222,10 +221,8 @@ async def _search_sites_for_query(
                     )
                 else:
                     log_lines.append(f"    -- {site.name}: 商品URLなし（検索0件の可能性）")
-                last_err = None
                 break
-            except Exception as e:
-                last_err = e
+            except Exception as e:  # noqa: F841
                 if attempt == 0:
                     log_lines.append(f"    .. {site.name}: 再試行（{type(e).__name__}）")
                     await asyncio.sleep(2)
@@ -251,6 +248,7 @@ async def discover_supply_urls_async(
     log_lines: Optional[list[str]] = None,
 ) -> list[SupplyUrlCandidate]:
     from playwright.async_api import async_playwright
+
     from lib.scraper.stealth import (
         LAUNCH_ARGS,
         apply_stealth_scripts,
@@ -298,40 +296,53 @@ async def discover_supply_urls_async(
                     page_wait_ms=page_wait_ms,
                     log_lines=lines,
                 )
-                norm_brand = normalize_brand_name(brand)
-                valid = [
-                    c for c in batch
-                    if url_is_valid_supply_candidate(
-                        norm_brand,
-                        c.product_url,
-                        style_id=style_id_hint,
-                        product_name=rank_context,
-                    )
-                ]
-                if batch and not valid:
-                    lines.append(
-                        "    （ブランド不一致・中古pre-owned・不正FARFETCH URL等は除外）"
-                    )
-                for c in valid:
-                    if c.domain in seen_domains:
-                        continue
-                    seen_domains.add(c.domain)
-                    if style_id_hint and url_matches_style_hint(
-                        style_id_hint, c.product_url
-                    ):
-                        all_found.insert(0, c)
-                    else:
-                        all_found.append(c)
-                if style_id_hint and any(
-                    url_matches_style_hint(style_id_hint, c.product_url)
-                    for c in valid
-                ):
+                should_stop = _merge_batch_results(
+                    batch, all_found, seen_domains,
+                    norm_brand=norm_brand,
+                    style_id_hint=style_id_hint,
+                    rank_context=rank_context,
+                    lines=lines,
+                )
+                if should_stop:
                     break
 
         finally:
             await browser.close()
 
     return all_found
+
+
+def _merge_batch_results(
+    batch: list[SupplyUrlCandidate],
+    all_found: list[SupplyUrlCandidate],
+    seen_domains: set[str],
+    *,
+    norm_brand: str,
+    style_id_hint: str,
+    rank_context: str,
+    lines: list[str],
+) -> bool:
+    """バッチ結果をフィルタリングして all_found に追加する。型番一致が見つかれば True を返す。"""
+    valid = [
+        c for c in batch
+        if url_is_valid_supply_candidate(
+            norm_brand, c.product_url, style_id=style_id_hint, product_name=rank_context,
+        )
+    ]
+    if batch and not valid:
+        lines.append("    （ブランド不一致・中古pre-owned・不正FARFETCH URL等は除外）")
+    for c in valid:
+        if c.domain in seen_domains:
+            continue
+        seen_domains.add(c.domain)
+        if style_id_hint and url_matches_style_hint(style_id_hint, c.product_url):
+            all_found.insert(0, c)
+        else:
+            all_found.append(c)
+    return bool(
+        style_id_hint
+        and any(url_matches_style_hint(style_id_hint, c.product_url) for c in valid)
+    )
 
 
 def _candidate_from_product_url(url: str) -> SupplyUrlCandidate:
@@ -422,11 +433,24 @@ def discover_supply_urls_sync(
     brand: str,
     product_name: str,
     style_id: Optional[str] = None,
-    **kwargs: object,
+    *,
+    raw_product_name: Optional[str] = None,
+    official_english_name: str = "",
+    headless: bool = True,
+    max_sites: int = 5,
+    timeout_ms: Optional[int] = None,
+    page_wait_ms: int = 3000,
+    log_lines: Optional[list[str]] = None,
 ) -> list[SupplyUrlCandidate]:
-    log = kwargs.pop("log_lines", None)
-    return asyncio.run(
+    return run_sync(
         discover_supply_urls_async(
-            brand, product_name, style_id, log_lines=log, **kwargs  # type: ignore[arg-type]
+            brand, product_name, style_id,
+            raw_product_name=raw_product_name,
+            official_english_name=official_english_name,
+            headless=headless,
+            max_sites=max_sites,
+            timeout_ms=timeout_ms,
+            page_wait_ms=page_wait_ms,
+            log_lines=log_lines,
         )
     )

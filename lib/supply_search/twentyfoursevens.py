@@ -12,14 +12,14 @@ LVMH グループ運営。クラウド headless では Akamai 403 になりや�
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus
 
+from lib.async_compat import run_sync
+from lib.supply_search.base_search import iter_json_ld_products
 from lib.supply_search.json_walk import (
     SearchHit,
     collect_hits_from_json_text,
@@ -42,10 +42,6 @@ _XHR_URL_HINTS = (
     "listing",
 )
 
-_JSON_LD_RE = re.compile(
-    r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
-    re.I | re.S,
-)
 _PRODUCT_HREF_RE = re.compile(
     r'https?://(?:www\.)?24s\.com/(?:en-[a-z]{2}/)?[a-z0-9]+(?:-[a-z0-9]+)+(?:_[A-Z0-9]+)?',
     re.I,
@@ -165,55 +161,8 @@ def _parse_json_ld_products(html: str) -> list[TwentyFourSCatalogItem]:
             )
         )
 
-    for m in _JSON_LD_RE.finditer(html or ""):
-        try:
-            data = json.loads(m.group(1))
-        except json.JSONDecodeError:
-            continue
-        roots = data if isinstance(data, list) else [data]
-        for root in roots:
-            if not isinstance(root, dict):
-                continue
-            if root.get("@type") == "ItemList":
-                for el in root.get("itemListElement") or []:
-                    if not isinstance(el, dict):
-                        continue
-                    item = el.get("item") if isinstance(el.get("item"), dict) else el
-                    if not isinstance(item, dict):
-                        continue
-                    brand_raw = item.get("brand") or {}
-                    brand = (
-                        brand_raw.get("name", "")
-                        if isinstance(brand_raw, dict)
-                        else str(brand_raw)
-                    )
-                    offers = item.get("offers") or {}
-                    if isinstance(offers, list):
-                        offers = offers[0] if offers else {}
-                    _add(
-                        str(item.get("name") or el.get("name") or ""),
-                        str(brand),
-                        str((offers or {}).get("url") or item.get("url") or el.get("url") or ""),
-                        str(item.get("sku") or item.get("mpn") or ""),
-                        "json_ld_itemlist",
-                    )
-            elif root.get("@type") == "Product":
-                brand_raw = root.get("brand") or {}
-                brand = (
-                    brand_raw.get("name", "")
-                    if isinstance(brand_raw, dict)
-                    else str(brand_raw)
-                )
-                offers = root.get("offers") or {}
-                if isinstance(offers, list):
-                    offers = offers[0] if offers else {}
-                _add(
-                    str(root.get("name") or ""),
-                    str(brand),
-                    str((offers or {}).get("url") or root.get("url") or ""),
-                    str(root.get("sku") or root.get("mpn") or ""),
-                    "json_ld_product",
-                )
+    for rec in iter_json_ld_products(html):
+        _add(rec["name"], rec["brand"], rec["url"], rec["sku"], rec["source"])
     return out
 
 
@@ -327,12 +276,12 @@ def rank_24s_catalog_items(
     brand: str = "",
     limit: int = 5,
 ) -> list[tuple[TwentyFourSCatalogItem, int]]:
-    scored = [
-        (item, _score_item(item, style_id=style_id, product_name=product_name, brand=brand))
-        for item in items
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:limit]
+    from lib.supply_search.base_search import rank_catalog_items
+
+    return rank_catalog_items(
+        items, style_id=style_id, product_name=product_name,
+        brand=brand, limit=limit, scorer=_score_item,
+    )
 
 
 def merge_search_hits(
@@ -343,31 +292,13 @@ def merge_search_hits(
     product_name: str,
     brand: str,
 ) -> list[str]:
-    urls: list[str] = []
-    seen: set[str] = set()
+    from lib.supply_search.base_search import rank_merge_and_debug
 
-    ranked = rank_24s_catalog_items(
-        catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
+    urls, _ = rank_merge_and_debug(
+        catalog, xhr_hits, style_id=style_id, product_name=product_name,
+        brand=brand, base_url=_BASE, url_validator=is_valid_24s_product_url,
+        scorer=_score_item,
     )
-    for item, score in ranked:
-        if score < 0:
-            continue
-        u = item.url.split("?")[0]
-        if u not in seen and is_valid_24s_product_url(u):
-            seen.add(u)
-            urls.append(u)
-
-    for hit in sorted(xhr_hits, key=lambda h: h.score, reverse=True):
-        u = (hit.url or "").split("?")[0]
-        if not u or u in seen:
-            continue
-        if not u.startswith("http"):
-            u = urljoin(_BASE, u)
-        if not is_valid_24s_product_url(u):
-            continue
-        seen.add(u)
-        urls.append(u)
-
     return urls
 
 
@@ -433,21 +364,12 @@ async def search_24s_product_urls(
     return urls, debug
 
 
-@dataclass
-class TwentyFourSSearchDiagnostics:
-    query: str
-    style_id: str
-    playwright_ok: bool
-    playwright_error: str = ""
-    search_url: str = ""
-    access_denied: bool = False
-    no_results: bool = False
-    json_ld_items: int = 0
-    html_link_items: int = 0
-    xhr_blobs: int = 0
-    candidate_count: int = 0
-    top_candidates: list[dict[str, Any]] = field(default_factory=list)
-    product_urls: list[str] = field(default_factory=list)
+from lib.supply_search.base_search import (
+    SearchDiagnostics as TwentyFourSSearchDiagnostics,
+)
+from lib.supply_search.base_search import (
+    run_playwright_search,
+)
 
 
 async def _lookup_playwright(
@@ -457,73 +379,20 @@ async def _lookup_playwright(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], TwentyFourSSearchDiagnostics]:
-    from playwright.async_api import async_playwright
-    from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
+    async def _search(page: Any, *, xhr_blobs: list[str], **_kw: Any) -> tuple[list[str], dict[str, Any]]:
+        return await search_24s_product_urls(
+            page, query, brand=brand, style_id=style_id,
+            product_name=product_name or query, xhr_blobs=xhr_blobs,
+        )
 
     diag = TwentyFourSSearchDiagnostics(
-        query=query,
-        style_id=style_id,
-        playwright_ok=False,
+        query=query, style_id=style_id, playwright_ok=False,
         search_url=build_24s_search_url(query),
     )
-    xhr_blobs: list[str] = []
-
-    try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
-            try:
-                ctx_opts = stealth_context_options()
-                ctx_opts["locale"] = "en-US"
-                ctx = await browser.new_context(**ctx_opts)
-                page = await ctx.new_page()
-                await apply_stealth_scripts(page)
-
-                async def on_response(resp) -> None:
-                    u = resp.url
-                    if "24s.com" not in u.lower():
-                        return
-                    if not any(h in u.lower() for h in _XHR_URL_HINTS):
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                    try:
-                        if resp.status != 200:
-                            return
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                        text = await resp.text()
-                        if len(text) < 80:
-                            return
-                        xhr_blobs.append(text)
-                    except Exception:
-                        pass
-
-                page.on("response", on_response)
-                urls, dbg = await search_24s_product_urls(
-                    page,
-                    query,
-                    brand=brand,
-                    style_id=style_id,
-                    product_name=product_name or query,
-                    xhr_blobs=xhr_blobs,
-                )
-                diag.playwright_ok = True
-                diag.access_denied = dbg["access_denied"]
-                diag.no_results = dbg["no_results"]
-                diag.json_ld_items = dbg["json_ld_items"]
-                diag.html_link_items = dbg["html_link_items"]
-                diag.xhr_blobs = len(xhr_blobs)
-                diag.top_candidates = dbg["top_scores"]
-                diag.product_urls = urls
-                diag.candidate_count = len(urls)
-                return urls, diag
-            finally:
-                await browser.close()
-    except Exception as e:
-        diag.playwright_error = str(e)
-        logger.debug("24s search playwright failed: %s", e)
-        return [], diag
+    return await run_playwright_search(
+        "24s.com", _XHR_URL_HINTS, _search,
+        diag.search_url, diag,
+    )
 
 
 def lookup_24s_search_diagnose(
@@ -533,11 +402,9 @@ def lookup_24s_search_diagnose(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], TwentyFourSSearchDiagnostics]:
-    return asyncio.run(
+    return run_sync(
         _lookup_playwright(
-            query,
-            brand=brand,
-            style_id=style_id,
+            query, brand=brand, style_id=style_id,
             product_name=product_name or query,
         )
     )

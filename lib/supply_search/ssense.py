@@ -10,14 +10,14 @@ SSENSE 検索 URL（2026-05）:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus
 
+from lib.async_compat import run_sync
 from lib.supply_search.json_walk import (
     SearchHit,
     collect_hits_from_json_text,
@@ -218,6 +218,36 @@ def _has_category_intent(product_name: str) -> bool:
     return any(t in name_l for t in tokens)
 
 
+def _category_intent_delta(
+    blob: str, path: str, product_name: str, pos: list[str], neg: list[str]
+) -> int:
+    """カテゴリ意図がある場合のヒント加減点。"""
+    delta = 0
+    for hint in pos:
+        h = hint.lower().replace("-", " ")
+        if h in blob or h.replace(" ", "-") in path.lower():
+            delta += 25
+        if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag")):
+            delta += 25
+        if hint == "wallet" and "wallet" in blob:
+            delta += 25
+        if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
+            delta += 20
+        if hint in ("sunglasses", "eyewear") and any(
+            k in blob for k in ("sunglass", "eyewear", "サングラス", "glasses")
+        ):
+            delta += 25
+    for hint in neg:
+        if hint.lower() in blob:
+            delta -= 40
+    if "eyewear" in blob and not any(
+        x in (product_name or "").lower()
+        for x in ("sunglass", "eyewear", "サングラス", "メガネ", "glasses")
+    ):
+        delta -= 25
+    return delta
+
+
 def _score_item(
     item: SsenseCatalogItem,
     *,
@@ -234,31 +264,9 @@ def _score_item(
             score += 100
         if item.sku and style_id_matches_loose(sid, item.sku):
             score += 90
-    category_intent = _has_category_intent(product_name)
     pos, neg = infer_supply_category_hints(product_name)
-    if category_intent:
-        for hint in pos:
-            h = hint.lower().replace("-", " ")
-            if h in blob or h.replace(" ", "-") in item.path.lower():
-                score += 25
-            if hint == "bag" and any(k in blob for k in ("バッグ", "handbag", "hand bag")):
-                score += 25
-            if hint == "wallet" and "wallet" in blob:
-                score += 25
-            if hint == "shoulder" and any(k in blob for k in ("ショルダー", "shoulder")):
-                score += 20
-            if hint in ("sunglasses", "eyewear") and any(
-                k in blob for k in ("sunglass", "eyewear", "サングラス", "glasses")
-            ):
-                score += 25
-        for hint in neg:
-            if hint.lower() in blob:
-                score -= 40
-        if "eyewear" in blob and not any(
-            x in (product_name or "").lower()
-            for x in ("sunglass", "eyewear", "サングラス", "メガネ", "glasses")
-        ):
-            score -= 25
+    if _has_category_intent(product_name):
+        score += _category_intent_delta(blob, item.path, product_name, pos, neg)
     if brand and not _brand_matches(brand, item.brand, item.name, item.path):
         score -= 50
     if not is_valid_ssense_product_url(item.url):
@@ -284,12 +292,12 @@ def rank_ssense_catalog_items(
     brand: str = "",
     limit: int = 5,
 ) -> list[tuple[SsenseCatalogItem, int]]:
-    scored = [
-        (item, _score_item(item, style_id=style_id, product_name=product_name, brand=brand))
-        for item in items
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:limit]
+    from lib.supply_search.base_search import rank_catalog_items
+
+    return rank_catalog_items(
+        items, style_id=style_id, product_name=product_name,
+        brand=brand, limit=limit, scorer=_score_item,
+    )
 
 
 def merge_search_hits(
@@ -300,31 +308,13 @@ def merge_search_hits(
     product_name: str,
     brand: str,
 ) -> list[str]:
-    urls: list[str] = []
-    seen: set[str] = set()
+    from lib.supply_search.base_search import rank_merge_and_debug
 
-    ranked = rank_ssense_catalog_items(
-        catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
+    urls, _ = rank_merge_and_debug(
+        catalog, xhr_hits, style_id=style_id, product_name=product_name,
+        brand=brand, base_url=_BASE, url_validator=is_valid_ssense_product_url,
+        scorer=_score_item,
     )
-    for item, score in ranked:
-        if score < 0:
-            continue
-        u = item.url.split("?")[0]
-        if u not in seen and is_valid_ssense_product_url(u):
-            seen.add(u)
-            urls.append(u)
-
-    for hit in sorted(xhr_hits, key=lambda h: h.score, reverse=True):
-        u = (hit.url or "").split("?")[0]
-        if not u or u in seen:
-            continue
-        if not u.startswith("http"):
-            u = urljoin(_BASE, u)
-        if not is_valid_ssense_product_url(u):
-            continue
-        seen.add(u)
-        urls.append(u)
-
     return urls
 
 
@@ -389,20 +379,12 @@ async def search_ssense_product_urls(
     return urls, debug
 
 
-@dataclass
-class SsenseSearchDiagnostics:
-    query: str
-    style_id: str
-    playwright_ok: bool
-    playwright_error: str = ""
-    search_url: str = ""
-    no_results: bool = False
-    json_ld_items: int = 0
-    html_link_items: int = 0
-    xhr_blobs: int = 0
-    candidate_count: int = 0
-    top_candidates: list[dict[str, Any]] = field(default_factory=list)
-    product_urls: list[str] = field(default_factory=list)
+from lib.supply_search.base_search import (
+    SearchDiagnostics as SsenseSearchDiagnostics,
+)
+from lib.supply_search.base_search import (
+    run_playwright_search,
+)
 
 
 async def _lookup_playwright(
@@ -413,71 +395,21 @@ async def _lookup_playwright(
     product_name: str = "",
     department: str = "women",
 ) -> tuple[list[str], SsenseSearchDiagnostics]:
-    from playwright.async_api import async_playwright
-    from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
+    async def _search(page: Any, *, xhr_blobs: list[str], **_kw: Any) -> tuple[list[str], dict[str, Any]]:
+        return await search_ssense_product_urls(
+            page, query, brand=brand, style_id=style_id,
+            product_name=product_name or query, xhr_blobs=xhr_blobs,
+            department=department,
+        )
 
     diag = SsenseSearchDiagnostics(
-        query=query,
-        style_id=style_id,
-        playwright_ok=False,
+        query=query, style_id=style_id, playwright_ok=False,
         search_url=build_ssense_search_url(query, department=department),
     )
-    xhr_blobs: list[str] = []
-
-    try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
-            try:
-                ctx = await browser.new_context(**stealth_context_options())
-                page = await ctx.new_page()
-                await apply_stealth_scripts(page)
-
-                async def on_response(resp) -> None:
-                    u = resp.url
-                    if "ssense.com" not in u.lower():
-                        return
-                    if not any(h in u.lower() for h in _XHR_URL_HINTS):
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                    try:
-                        if resp.status != 200:
-                            return
-                        ct = resp.headers.get("content-type") or ""
-                        if "json" not in ct:
-                            return
-                        text = await resp.text()
-                        if len(text) < 80:
-                            return
-                        xhr_blobs.append(text)
-                    except Exception:
-                        pass
-
-                page.on("response", on_response)
-                urls, dbg = await search_ssense_product_urls(
-                    page,
-                    query,
-                    brand=brand,
-                    style_id=style_id,
-                    product_name=product_name or query,
-                    xhr_blobs=xhr_blobs,
-                    department=department,
-                )
-                diag.playwright_ok = True
-                diag.no_results = dbg["no_results"]
-                diag.json_ld_items = dbg["json_ld_items"]
-                diag.html_link_items = dbg["html_link_items"]
-                diag.xhr_blobs = len(xhr_blobs)
-                diag.top_candidates = dbg["top_scores"]
-                diag.product_urls = urls
-                diag.candidate_count = len(urls)
-                return urls, diag
-            finally:
-                await browser.close()
-    except Exception as e:
-        diag.playwright_error = str(e)
-        logger.debug("ssense search playwright failed: %s", e)
-        return [], diag
+    return await run_playwright_search(
+        "ssense.com", _XHR_URL_HINTS, _search,
+        diag.search_url, diag,
+    )
 
 
 def lookup_ssense_search_diagnose(
@@ -488,12 +420,9 @@ def lookup_ssense_search_diagnose(
     product_name: str = "",
     department: str = "women",
 ) -> tuple[list[str], SsenseSearchDiagnostics]:
-    return asyncio.run(
+    return run_sync(
         _lookup_playwright(
-            query,
-            brand=brand,
-            style_id=style_id,
-            product_name=product_name,
-            department=department,
+            query, brand=brand, style_id=style_id,
+            product_name=product_name, department=department,
         )
     )

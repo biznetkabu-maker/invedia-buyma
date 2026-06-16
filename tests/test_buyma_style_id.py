@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from lib.buyma_style_id import (
+    _is_plausible_code,
     extract_primary_style_id_from_buyma_html,
     extract_style_id_candidates_from_html,
+    fetch_buyma_style_id_from_url_sync,
     is_buyma_item_url,
 )
 from lib.multi_source import style_id_consistent_with_buyma
@@ -55,6 +58,55 @@ class TestIsBUYMAItemUrl(unittest.TestCase):
         self.assertFalse(
             is_buyma_item_url("https://www.buyma.com/buy/search/?keyword=CELINE")
         )
+
+    def test_item_id_in_path(self):
+        self.assertTrue(is_buyma_item_url("https://buyma.com/item/99887766"))
+
+    def test_non_buyma_url(self):
+        self.assertFalse(is_buyma_item_url("https://example.com/items/1"))
+
+    def test_empty_url(self):
+        self.assertFalse(is_buyma_item_url(""))
+
+
+class TestPlausibleCode(unittest.TestCase):
+    def test_too_short(self):
+        self.assertFalse(_is_plausible_code("AB1"))
+
+    def test_too_long(self):
+        self.assertFalse(_is_plausible_code("A" * 49))
+
+    def test_long_all_digits_rejected(self):
+        self.assertFalse(_is_plausible_code("123456789012345"))
+
+    def test_url_rejected(self):
+        self.assertFalse(_is_plausible_code("http://x.com/abc"))
+
+    def test_valid_code(self):
+        self.assertTrue(_is_plausible_code("ARC58-BLK"))
+
+
+class TestExtractEdgeCases(unittest.TestCase):
+    def test_empty_html_returns_empty(self):
+        self.assertEqual(extract_style_id_candidates_from_html(""), [])
+
+    def test_primary_none_when_no_match(self):
+        self.assertIsNone(extract_primary_style_id_from_buyma_html("<div>なし</div>"))
+
+    def test_excluded_normalized_filtered(self):
+        # SIZE / COLOR は除外語
+        html = "<div>型番：SIZE</div><div>品番：COLOR</div>"
+        self.assertEqual(extract_style_id_candidates_from_html(html), [])
+
+
+class TestFetchSyncWrapper(unittest.TestCase):
+    def test_sync_wrapper_returns_async_result(self):
+        async def _fake(url, **kwargs):
+            return "ABC-123"
+
+        with patch("lib.buyma_style_id.fetch_buyma_style_id_from_url", side_effect=_fake):
+            result = fetch_buyma_style_id_from_url_sync("https://buyma.com/items/1/")
+        self.assertEqual(result, "ABC-123")
 
 
 class TestStyleIdUtils(unittest.TestCase):

@@ -16,16 +16,18 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import sys
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
+from lib.async_compat import run_sync
 from lib.config import Config
 from lib.forex import get_rates_for_sheet, update_sheet_exchange_rates
+from lib.intake_cli import cli_print
 from lib.multi_source import BestSourceFinder, BestSourceResult, style_id_consistent_with_buyma
 from lib.notification_manager import NotificationManager
 from lib.profit_calculator import ProfitBreakdown, try_calculate_profit
@@ -33,11 +35,6 @@ from lib.scraper import PriceScraper, ScrapedResult
 from lib.scraper.proxy import ProxyRotator
 from lib.sheet_manager import ProductRecord, SheetManager
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -159,9 +156,9 @@ def _check_style_id_mismatches(results: list[ProductResult]) -> None:
         from lib.line_notifier import LINENotifier
         notifier = LINENotifier()
         if notifier.is_configured:
-            notifier._notify_raw(alert_text)
+            notifier.send_text(alert_text)
     except Exception:
-        pass
+        logger.debug("LINE通知送信失敗", exc_info=True)
 
 def process_product(
     record: ProductRecord,
@@ -210,24 +207,19 @@ def process_product(
 
 # ── サマリー出力 ─────────────────────────────────────────────────────────────
 
-_UNKNOWN_HISTORY_FILE = "scraper_unknown_history.json"
+_UNKNOWN_HISTORY_FILE = Path("scraper_unknown_history.json")
 
 
 def _load_unknown_history() -> dict[str, int]:
     """商品名→連続 unknown 回数のキャッシュを読む。"""
-    import json
-    try:
-        return json.loads(open(_UNKNOWN_HISTORY_FILE).read())
-    except Exception:
-        return {}
+    from lib.file_lock import atomic_json_read
+    data = atomic_json_read(_UNKNOWN_HISTORY_FILE, default={})
+    return {str(k): int(v) for k, v in data.items()}
 
 
 def _save_unknown_history(history: dict[str, int]) -> None:
-    import json
-    try:
-        open(_UNKNOWN_HISTORY_FILE, "w").write(json.dumps(history, ensure_ascii=False))
-    except Exception:
-        pass
+    from lib.file_lock import atomic_json_write
+    atomic_json_write(_UNKNOWN_HISTORY_FILE, history)
 
 
 def _check_scraper_health(results: list[ProductResult], config: Config) -> None:
@@ -267,9 +259,9 @@ def _check_scraper_health(results: list[ProductResult], config: Config) -> None:
             from lib.line_notifier import LINENotifier
             notifier = LINENotifier()
             if notifier.is_configured:
-                notifier._notify_raw(alert_text)
+                notifier.send_text(alert_text)
         except Exception:
-            pass
+            logger.debug("LINE通知送信失敗", exc_info=True)
 
 
 def print_summary(results: list[ProductResult], config: Config) -> None:
@@ -282,19 +274,21 @@ def print_summary(results: list[ProductResult], config: Config) -> None:
     errors = sum(1 for r in results if not r.ok)
 
     separator = "=" * 60
-    print(f"\n{separator}")
-    print(f"  巡回完了: {now}")
-    print(f"  対象商品: {len(results)} 件")
-    print(f"  出品中  : {active} 件")
-    print(f"  停止中  : {stopped} 件")
-    print(f"  要確認  : {warning} 件")
-    print(f"  エラー  : {errors} 件")
-    print(separator)
-    print(f"  設定 — BUYMA手数料: {config.buyma_fee_rate:.0%} | "
+    logger.info("巡回完了: %s | 対象:%d 出品中:%d 停止:%d 要確認:%d エラー:%d",
+                now, len(results), active, stopped, warning, errors)
+    cli_print(f"\n{separator}")
+    cli_print(f"  巡回完了: {now}")
+    cli_print(f"  対象商品: {len(results)} 件")
+    cli_print(f"  出品中  : {active} 件")
+    cli_print(f"  停止中  : {stopped} 件")
+    cli_print(f"  要確認  : {warning} 件")
+    cli_print(f"  エラー  : {errors} 件")
+    cli_print(separator)
+    cli_print(f"  設定 — BUYMA手数料: {config.buyma_fee_rate:.0%} | "
           f"関税: {config.customs_rate:.0%} | "
           f"送料: ¥{config.shipping_cost_jpy:,.0f} | "
           f"目標利益率: {config.target_profit_rate:.0%}")
-    print(separator)
+    cli_print(separator)
 
     for r in results:
         status_icon = {
@@ -312,13 +306,13 @@ def print_summary(results: list[ProductResult], config: Config) -> None:
             else ("取得失敗" if r.scrape and not r.scrape.success else "URLなし")
         )
 
-        print(
+        cli_print(
             f"  {status_icon} {r.updated.商品名[:20]:<20} | "
             f"現地価格: {scrape_price:<18} | "
             f"利益: {profit_str:<22} | {r.updated.在庫ステータス}"
         )
 
-    print(separator + "\n")
+    cli_print(separator + "\n")
 
 
 # ── メインフロー ─────────────────────────────────────────────────────────────
@@ -355,10 +349,10 @@ def _get_priority_products(
     return result
 
 
-async def run(config: Config) -> list[ProductResult]:
-    """メイン処理を非同期で実行する。"""
-
-    # ── 1. シートから全商品読み込み ──────────────────────────────────────────
+async def _load_sheet_data(
+    config: Config,
+) -> tuple[SheetManager, list[ProductRecord], list[tuple[int, ProductRecord]]]:
+    """シートから全商品を読み込み、優先度フィルタリングして返す。"""
     tier = config.effective_priority_tier()
     logger.info(
         "スプレッドシートから商品情報を読み込み中... (優先度ティア: %s, モード: %s)",
@@ -371,26 +365,16 @@ async def run(config: Config) -> list[ProductResult]:
     )
     manager.ensure_header()
 
-    # 為替レート自動取得
-    live_rates: dict[str, float] = {}
     if config.auto_forex:
         logger.info("  為替レート自動取得中...")
         live_rates = get_rates_for_sheet(["USD", "EUR", "GBP", "CAD", "AUD"])
-        logger.info(
-            "  為替レート取得: %s",
-            {k: v for k, v in live_rates.items() if v},
-        )
+        logger.info("  為替レート取得: %s", {k: v for k, v in live_rates.items() if v})
         if config.forex_update_sheet:
             update_sheet_exchange_rates(manager)
 
     all_records = manager.get_all_records()
     logger.info("  %d 件の商品を読み込みました", len(all_records))
 
-    if not all_records:
-        logger.warning("商品データが空です。処理を終了します。")
-        return []
-
-    # 優先度フィルタリング
     target_indexed = _get_priority_products(
         all_records, tier,
         config.high_profit_threshold,
@@ -400,134 +384,119 @@ async def run(config: Config) -> list[ProductResult]:
         "  優先度フィルタ後: %d 件 / 全 %d 件",
         len(target_indexed), len(all_records),
     )
+    return manager, all_records, target_indexed
 
-    # ── 2. URL を持つ商品だけ抽出して並列スクレイピング ──────────────────────
-    #
-    # 候補URLs が設定されている商品は BestSourceFinder で複数仕入先を比較し、
-    # 「在庫あり × 最高利益率」のURLを仕入れURL に自動更新してから通常スクレイプに回す。
-    #
-    proxy_rotator = ProxyRotator.from_env()
-    if proxy_rotator:
-        logger.info("  プロキシ使用: %d 台", len(proxy_rotator))
 
-    # 候補URLあり → BestSourceFinder で最安値選択
+async def _compare_candidate_urls(
+    target_indexed: list[tuple[int, ProductRecord]],
+    config: Config,
+    proxy_rotator: Optional[ProxyRotator],
+) -> list[tuple[int, ProductRecord]]:
+    """候補URLを比較し、最安値の仕入先URLで target_indexed を更新する。"""
     indexed_with_candidates = [
-        (i, r)
-        for i, r in target_indexed
-        if r.candidate_url_list()
-        and r.在庫ステータス.strip() != "BUYMA候補"
+        (i, r) for i, r in target_indexed
+        if r.candidate_url_list() and r.在庫ステータス.strip() != "BUYMA候補"
     ]
-    if indexed_with_candidates:
-        logger.info("  候補URL比較対象: %d 件", len(indexed_with_candidates))
-        finder = BestSourceFinder(
-            headless=config.scraper_headless,
-            timeout_ms=config.scraper_timeout_ms,
-            max_retries=config.scraper_max_retries,
-            proxy_rotator=proxy_rotator,
-        )
-        for idx, record in indexed_with_candidates:
-            try:
-                buyma_price = float(record.BUYMA販売価格 or 0)
-                exchange_rate = float(record.為替 or 0)
-                if buyma_price <= 0 or exchange_rate <= 0:
-                    logger.warning("    [%d] 価格/為替が未設定のため候補URL比較をスキップ", idx)
-                    continue
+    if not indexed_with_candidates:
+        return target_indexed
 
-                buyma_sid = (record.型番 or "").strip() or None
-                best_result: BestSourceResult = await finder.find_best_async(
-                    candidate_urls=record.candidate_url_list(),
-                    buyma_price=buyma_price,
-                    exchange_rate=exchange_rate,
-                    buyma_style_id=buyma_sid,
-                    customs_rate=config.customs_rate,
-                    shipping_cost_jpy=config.shipping_cost_jpy,
-                    buyma_fee_rate=config.buyma_fee_rate,
-                )
-                if best_result.best:
-                    # 最安値・在庫ありのURLで仕入れURLを自動更新
-                    updated_record = target_indexed[
-                        next(j for j, (k, _) in enumerate(target_indexed) if k == idx)
-                    ][1]
-                    # target_indexed 内のレコードを更新（参照置換）
-                    for j, (k, r) in enumerate(target_indexed):
-                        if k == idx:
-                            from dataclasses import replace as dc_replace
-                            new_r = dc_replace(r, 仕入れURL=best_result.best.url)
-                            target_indexed[j] = (k, new_r)
-                            logger.info(
-                                "    [%d] 仕入先自動選択: %s → 利益率 %s",
-                                idx, best_result.best.url[:60],
-                                f"{best_result.best.profit_rate:.1%}" if best_result.best.profit_rate else "不明",
-                            )
-                            break
-                else:
-                    logger.info(
-                        "    [%d] 在庫ありの仕入先なし: %s", idx, best_result.reason
-                    )
-            except Exception as e:
-                logger.warning("    [%d] 候補URL比較エラー: %s", idx, e)
+    logger.info("  候補URL比較対象: %d 件", len(indexed_with_candidates))
+    finder = BestSourceFinder(
+        headless=config.scraper_headless,
+        timeout_ms=config.scraper_timeout_ms,
+        max_retries=config.scraper_max_retries,
+        proxy_rotator=proxy_rotator,
+    )
+    for idx, record in indexed_with_candidates:
+        try:
+            buyma_price = float(record.BUYMA販売価格 or 0)
+            exchange_rate = float(record.為替 or 0)
+            if buyma_price <= 0 or exchange_rate <= 0:
+                logger.warning("    [%d] 価格/為替が未設定のため候補URL比較をスキップ", idx)
+                continue
 
+            buyma_sid = (record.型番 or "").strip() or None
+            best_result: BestSourceResult = await finder.find_best_async(
+                candidate_urls=record.candidate_url_list(),
+                buyma_price=buyma_price,
+                exchange_rate=exchange_rate,
+                buyma_style_id=buyma_sid,
+                customs_rate=config.customs_rate,
+                shipping_cost_jpy=config.shipping_cost_jpy,
+                buyma_fee_rate=config.buyma_fee_rate,
+            )
+            if best_result.best:
+                for j, (k, r) in enumerate(target_indexed):
+                    if k == idx:
+                        new_r = replace(r, 仕入れURL=best_result.best.url)
+                        target_indexed[j] = (k, new_r)
+                        logger.info(
+                            "    [%d] 仕入先自動選択: %s → 利益率 %s",
+                            idx, best_result.best.url[:60],
+                            f"{best_result.best.profit_rate:.1%}" if best_result.best.profit_rate else "不明",
+                        )
+                        break
+            else:
+                logger.info("    [%d] 在庫ありの仕入先なし: %s", idx, best_result.reason)
+        except Exception as e:
+            logger.warning("    [%d] 候補URL比較エラー: %s", idx, e)
+    return target_indexed
+
+
+async def _execute_scraping(
+    target_indexed: list[tuple[int, ProductRecord]],
+    config: Config,
+    proxy_rotator: Optional[ProxyRotator],
+) -> dict[int, ScrapedResult]:
+    """スクレイピング可能なURLを持つ商品を並列スクレイピングする。"""
     indexed_with_url = [
-        (i, r)
-        for i, r in target_indexed
+        (i, r) for i, r in target_indexed
         if is_scrapable_source_url(r.仕入れURL)
     ]
     indexed_without_url = [(i, r) for i, r in target_indexed if not r.仕入れURL.strip()]
-
     logger.info(
         "  スクレイピング対象: %d 件 / URLなし: %d 件",
-        len(indexed_with_url),
-        len(indexed_without_url),
+        len(indexed_with_url), len(indexed_without_url),
     )
 
     scrape_map: dict[int, ScrapedResult] = {}
+    if not indexed_with_url:
+        return scrape_map
 
-    if indexed_with_url:
-        scraper = PriceScraper(
-            headless=config.scraper_headless,
-            timeout_ms=config.scraper_timeout_ms,
-            max_retries=config.scraper_max_retries,
-            proxy_rotator=proxy_rotator,
-        )
-        urls = [r.仕入れURL for _, r in indexed_with_url]
+    scraper = PriceScraper(
+        headless=config.scraper_headless,
+        timeout_ms=config.scraper_timeout_ms,
+        max_retries=config.scraper_max_retries,
+        proxy_rotator=proxy_rotator,
+    )
+    urls = [r.仕入れURL for _, r in indexed_with_url]
+    logger.info("  巡回開始 (並列数: %d)...", config.scraper_concurrency)
+    scrape_results = await scraper.scrape_many_async(urls, concurrency=config.scraper_concurrency)
 
-        logger.info("  巡回開始 (並列数: %d)...", config.scraper_concurrency)
-        scrape_results = await scraper.scrape_many_async(urls, concurrency=config.scraper_concurrency)
+    for (idx, _), result in zip(indexed_with_url, scrape_results):
+        scrape_map[idx] = result
+        if not result.success:
+            logger.warning("    [%d] スクレイピング失敗: %s", idx, result.error)
+        else:
+            sid_note = f" | ID={result.style_id}" if result.style_id else ""
+            logger.info(
+                "    [%d] 取得OK — %s %s | %s%s",
+                idx, result.currency or "", result.price or "N/A",
+                result.stock_status, sid_note,
+            )
+    return scrape_map
 
-        for (idx, _), result in zip(indexed_with_url, scrape_results):
-            scrape_map[idx] = result
-            if not result.success:
-                logger.warning("    [%d] スクレイピング失敗: %s", idx, result.error)
-            else:
-                sid_note = f" | ID={result.style_id}" if result.style_id else ""
-                logger.info(
-                    "    [%d] 取得OK — %s %s | %s%s",
-                    idx,
-                    result.currency or "",
-                    result.price or "N/A",
-                    result.stock_status,
-                    sid_note,
-                )
 
-    # ── 3 & 4. 利益計算 + ステータス判定 ─────────────────────────────────────
-    logger.info("利益計算・ステータス判定中...")
-    results: list[ProductResult] = []
-
-    for idx, record in target_indexed:
-        scrape = scrape_map.get(idx)
-        result = process_product(record, scrape, config)
-        results.append(result)
-
-    # ── 4.5 スクレイパー異常検知 ─────────────────────────────────────────────
-    _check_scraper_health(results, config)
-    _check_style_id_mismatches(results)
-
-    # ── 5. スプレッドシートに書き戻す ────────────────────────────────────────
+def _write_results_to_sheet(
+    manager: SheetManager,
+    results: list[ProductResult],
+) -> None:
+    """処理結果をスプレッドシートに書き戻す。"""
     logger.info("スプレッドシートに書き戻し中...")
     write_errors = 0
     for result in results:
         if result.updated == result.original:
-            continue  # 変更なし → APIコール節約
+            continue
         try:
             ok = manager.update_record(result.original.商品名, result.updated)
             if not ok:
@@ -535,14 +504,15 @@ async def run(config: Config) -> list[ProductResult]:
         except Exception as e:
             logger.error("  書き戻し失敗 [%s]: %s", result.original.商品名, e)
             write_errors += 1
-
     logger.info(
         "  書き戻し完了 (更新: %d 件 / エラー: %d 件)",
         sum(1 for r in results if r.updated != r.original),
         write_errors,
     )
 
-    # ── 7. お宝商品の通知（LINE + オプションで自動出品）─────────────────────
+
+def _send_notifications(results: list[ProductResult]) -> None:
+    """お宝商品の通知（LINE + オプションで自動出品）。"""
     notification_mgr = NotificationManager(
         profit_threshold=float(os.environ.get("LINE_PROFIT_THRESHOLD", "30000")),
         auto_list_grade=os.environ.get("AUTO_LIST_GRADE", ""),
@@ -552,15 +522,61 @@ async def run(config: Config) -> list[ProductResult]:
     logger.info(
         "通知処理: 検出 %d 件 / 新規 %d 件 / 通知送信 %s / 自動出品 %d 件",
         event.detected_count, event.new_count,
-        "✅" if event.notified else "（LINE未設定）",
+        "OK" if event.notified else "（LINE未設定）",
         event.listed_count,
     )
+
+
+async def run(config: Config) -> list[ProductResult]:
+    """メイン処理を非同期で実行する。"""
+
+    # 1. シートから全商品読み込み + 為替取得
+    manager, all_records, target_indexed = await _load_sheet_data(config)
+    if not all_records:
+        logger.warning("商品データが空です。処理を終了します。")
+        return []
+
+    # 2. プロキシ設定 + 候補URL比較
+    proxy_rotator = ProxyRotator.from_env()
+    if proxy_rotator:
+        logger.info("  プロキシ使用: %d 台", len(proxy_rotator))
+    target_indexed = await _compare_candidate_urls(target_indexed, config, proxy_rotator)
+
+    # 3. 並列スクレイピング
+    scrape_map = await _execute_scraping(target_indexed, config, proxy_rotator)
+
+    # 4. 利益計算 + ステータス判定
+    logger.info("利益計算・ステータス判定中...")
+    results: list[ProductResult] = []
+    for idx, record in target_indexed:
+        scrape = scrape_map.get(idx)
+        result = process_product(record, scrape, config)
+        results.append(result)
+
+    # 5. スクレイパー異常検知
+    _check_scraper_health(results, config)
+    _check_style_id_mismatches(results)
+
+    # 6. スプレッドシートに書き戻す
+    _write_results_to_sheet(manager, results)
+
+    # 7. お宝商品の通知
+    _send_notifications(results)
+
+    # 8. スクレイプメトリクスのサマリー出力
+    from lib.logging_config import get_metrics
+    metrics = get_metrics()
+    if metrics.sites:
+        metrics.log_summary()
 
     return results
 
 
 def main() -> int:
     """エントリーポイント。終了コードを返す（0=正常, 1=エラー）。"""
+    from lib.logging_config import setup_logging
+
+    setup_logging(level=logging.INFO)
     config = Config.from_env()
 
     try:
@@ -578,7 +594,7 @@ def main() -> int:
         )
 
         # メイン処理
-        results = asyncio.run(run(config))
+        results = run_sync(run(config))
 
         # ── 6. サマリー出力 ──────────────────────────────────────────────────
         if results:

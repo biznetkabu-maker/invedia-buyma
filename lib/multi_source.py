@@ -31,17 +31,17 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
-from lib.profit_calculator import calculate_profit, ProfitBreakdown
+from lib.async_compat import run_sync
+from lib.profit_calculator import ProfitBreakdown, calculate_profit
 from lib.scraper import PriceScraper
 from lib.scraper.models import ScrapedResult
-from lib.style_id_utils import scraped_matches_buyma_style
 from lib.scraper.proxy import ProxyRotator
+from lib.style_id_utils import scraped_matches_buyma_style
 
 if TYPE_CHECKING:
     from lib.product_identity import MatchScore
@@ -80,6 +80,7 @@ class SourceCandidate:
         )
 
     def summary(self) -> str:
+        """候補1件の在庫・価格・利益を1行のコンソール表示にまとめる。"""
         if self.price:
             cur = self.currency or "?"
             price_str = f"{cur} {self.price:,.2f}"
@@ -112,6 +113,7 @@ class BestSourceResult:
 
     @property
     def in_stock_count(self) -> int:
+        """在庫ありと判定された候補の件数。"""
         return sum(1 for c in self.all_candidates if c.stock_status == "in_stock")
 
     @property
@@ -123,6 +125,7 @@ class BestSourceResult:
         return min(avail, key=lambda c: c.price or float("inf"))
 
     def summary(self) -> str:
+        """候補比較の選定理由と各候補の概要を複数行で返す。"""
         lines = [
             f"比較結果: {len(self.all_candidates)}件中 在庫あり{self.in_stock_count}件",
             f"選定理由: {self.reason}",
@@ -185,7 +188,7 @@ class BestSourceFinder:
         fx_buffer_rate: float = 0.03,
     ) -> BestSourceResult:
         """候補URLリストを並列スクレイプし、最優良仕入先を返す（同期版）。"""
-        return asyncio.run(
+        result: BestSourceResult = run_sync(
             self.find_best_async(
                 candidate_urls=candidate_urls,
                 buyma_price=buyma_price,
@@ -197,6 +200,7 @@ class BestSourceFinder:
                 fx_buffer_rate=fx_buffer_rate,
             )
         )
+        return result
 
     async def find_best_async(
         self,
@@ -273,36 +277,7 @@ class BestSourceFinder:
             reason,
         )
 
-        from lib.product_identity import (
-            VariantKey,
-            score_when_no_supply,
-            summarize_best_source_result,
-        )
-
-        variant = VariantKey.resolve(sheet_style_id=buyma_style_id or "")
-        if best and best.price is not None and not best.error:
-            price_note = f"{best.currency or '?'} {best.price:,.2f}"
-            if best.profit_rate is not None:
-                price_note += f" 利益率{best.profit_rate:.1%}"
-            match_score = summarize_best_source_result(
-                variant,
-                best_url=best.url,
-                best_style_id=best.style_id,
-                best_stock=best.stock_status,
-                best_price_ok=True,
-                best_price_note=price_note[:160],
-            )
-        elif best:
-            match_score = summarize_best_source_result(
-                variant,
-                best_url=best.url,
-                best_style_id=best.style_id,
-                best_stock=best.stock_status,
-                best_price_ok=False,
-                best_price_note=(best.error or "価格未取得")[:160],
-            )
-        else:
-            match_score = score_when_no_supply(variant, reason=reason[:120])
+        match_score = _compute_match_score(best, buyma_style_id, reason)
 
         return BestSourceResult(
             best=best,
@@ -328,85 +303,46 @@ class BestSourceFinder:
         """ScrapedResult と利益計算を組み合わせて SourceCandidate を生成する。"""
         from lib.scraper.price_sanity import explain_price_rejection, is_plausible_supply_price
 
+        def _err_candidate(error: str, price: Optional[float] = None) -> SourceCandidate:
+            return SourceCandidate(
+                url=url, price=price, currency=scrape.currency,
+                stock_status=scrape.stock_status, jpy_cost=None,
+                profit=None, profit_rate=None, breakdown=None,
+                style_id=scrape.style_id, error=error,
+            )
+
         if not scrape.success or scrape.price is None:
             err = (scrape.error or "価格をページから取得できませんでした")[:160]
             if scrape.raw_price:
                 err = f"{err}（raw: {scrape.raw_price[:40]}）"
-            return SourceCandidate(
-                url=url,
-                price=None,
-                currency=scrape.currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=None,
-                profit=None,
-                profit_rate=None,
-                breakdown=None,
-                style_id=scrape.style_id,
-                error=err,
-            )
+            return _err_candidate(err)
 
         currency = scrape.currency
         if not is_plausible_supply_price(
-            scrape.price,
-            currency,
-            url,
-            buyma_price,
-            effective_rate,
-            raw_price=scrape.raw_price or "",
+            scrape.price, currency, url, buyma_price,
+            effective_rate, raw_price=scrape.raw_price or "",
         ):
-            return SourceCandidate(
-                url=url,
-                price=None,
-                currency=currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=None,
-                profit=None,
-                profit_rate=None,
-                breakdown=None,
-                style_id=scrape.style_id,
-                error=explain_price_rejection(
-                    scrape.price,
-                    currency,
-                    url,
-                    buyma_price,
-                    effective_rate,
-                    raw_price=scrape.raw_price or "",
+            return _err_candidate(
+                explain_price_rejection(
+                    scrape.price, currency, url, buyma_price,
+                    effective_rate, raw_price=scrape.raw_price or "",
                 )[:200],
             )
 
         try:
             breakdown = calculate_profit(
-                local_price=scrape.price,
-                exchange_rate=effective_rate,
-                buyma_price=buyma_price,
-                customs_rate=customs_rate,
-                shipping_cost=shipping_cost_jpy,
-                buyma_fee_rate=buyma_fee_rate,
+                local_price=scrape.price, exchange_rate=effective_rate,
+                buyma_price=buyma_price, customs_rate=customs_rate,
+                shipping_cost=shipping_cost_jpy, buyma_fee_rate=buyma_fee_rate,
             )
             return SourceCandidate(
-                url=url,
-                price=scrape.price,
-                currency=scrape.currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=breakdown.jpy_cost,
-                profit=breakdown.profit,
-                profit_rate=breakdown.profit_rate,
-                breakdown=breakdown,
-                style_id=scrape.style_id,
+                url=url, price=scrape.price, currency=scrape.currency,
+                stock_status=scrape.stock_status, jpy_cost=breakdown.jpy_cost,
+                profit=breakdown.profit, profit_rate=breakdown.profit_rate,
+                breakdown=breakdown, style_id=scrape.style_id,
             )
         except Exception as e:
-            return SourceCandidate(
-                url=url,
-                price=scrape.price,
-                currency=scrape.currency,
-                stock_status=scrape.stock_status,
-                jpy_cost=None,
-                profit=None,
-                profit_rate=None,
-                breakdown=None,
-                style_id=scrape.style_id,
-                error=str(e),
-            )
+            return _err_candidate(str(e), price=scrape.price)
 
     @staticmethod
     def _select_best(
@@ -461,6 +397,212 @@ class BestSourceFinder:
             reason += f" / 型番「{buyma_sid}」一致"
         return best, reason
 
+def _compute_match_score(
+    best: Optional[SourceCandidate],
+    buyma_style_id: Optional[str],
+    reason: str,
+) -> "MatchScore":
+    """最優良候補の有無に応じて MatchScore を生成する。"""
+    from lib.product_identity import (
+        VariantKey,
+        score_when_no_supply,
+        summarize_best_source_result,
+    )
+
+    variant = VariantKey.resolve(sheet_style_id=buyma_style_id or "")
+    if best and best.price is not None and not best.error:
+        price_note = f"{best.currency or '?'} {best.price:,.2f}"
+        if best.profit_rate is not None:
+            price_note += f" 利益率{best.profit_rate:.1%}"
+        return summarize_best_source_result(
+            variant,
+            best_url=best.url,
+            best_style_id=best.style_id,
+            best_stock=best.stock_status,
+            best_price_ok=True,
+            best_price_note=price_note[:160],
+        )
+    if best:
+        return summarize_best_source_result(
+            variant,
+            best_url=best.url,
+            best_style_id=best.style_id,
+            best_stock=best.stock_status,
+            best_price_ok=False,
+            best_price_note=(best.error or "価格未取得")[:160],
+        )
+    return score_when_no_supply(variant, reason=reason[:120])
+
+
+# ============================================================================
+# P3: 価格マルチソース投票
+# ============================================================================
+
+@dataclass
+class PriceVote:
+    """1つの仕入先が報告した価格票。"""
+
+    url: str
+    price: float
+    currency: str
+    source_site: str  # e.g. "ssense", "farfetch"
+
+    @property
+    def domain(self) -> str:
+        """URL のホスト名（取得できなければサイト名）を返す。"""
+        from urllib.parse import urlparse
+        return urlparse(self.url).hostname or self.source_site
+
+
+@dataclass
+class PriceConsensus:
+    """P3 投票の集計結果。"""
+
+    consensus_price: float
+    currency: str
+    votes: list[PriceVote]
+    outliers: list[PriceVote]
+    confidence: float  # 0.0 ~ 1.0
+    method: str  # "median", "single", "unanimous"
+
+    @property
+    def vote_count(self) -> int:
+        """合意形成に参加した有効票数。"""
+        return len(self.votes)
+
+    @property
+    def outlier_count(self) -> int:
+        """外れ値として除外された票数。"""
+        return len(self.outliers)
+
+    def summary(self) -> str:
+        """合意価格・信頼度・票数を1行に整形して返す。"""
+        return (
+            f"P3: {self.currency} {self.consensus_price:,.2f} "
+            f"(信頼度 {self.confidence:.0%}, {self.vote_count}票, "
+            f"外れ値{self.outlier_count}件, 方式: {self.method})"
+        )
+
+
+def compute_price_consensus(
+    candidates: list[SourceCandidate],
+    *,
+    outlier_threshold: float = 0.15,
+) -> Optional[PriceConsensus]:
+    """複数の SourceCandidate から価格コンセンサスを計算する。
+
+    同一通貨で価格取得済み・在庫ありの候補から投票を集め、
+    中央値を基準として外れ値（±threshold 以上の乖離）を除外し、
+    合意価格と信頼度を返す。
+
+    Args:
+        candidates: SourceCandidate のリスト
+        outlier_threshold: 外れ値の閾値（中央値からの乖離率、デフォルト 15%）
+
+    Returns:
+        PriceConsensus or None（有効な投票が 0 件の場合）
+    """
+    import statistics
+
+    votes: list[PriceVote] = []
+    for c in candidates:
+        if c.price is not None and c.currency and c.stock_status == "in_stock":
+            site = _extract_site_name(c.url)
+            votes.append(PriceVote(
+                url=c.url,
+                price=c.price,
+                currency=c.currency,
+                source_site=site,
+            ))
+
+    if not votes:
+        return None
+
+    # 通貨別にグループ化し、最多通貨を採用
+    currency_groups: dict[str, list[PriceVote]] = {}
+    for v in votes:
+        currency_groups.setdefault(v.currency, []).append(v)
+    primary_currency = max(currency_groups, key=lambda k: len(currency_groups[k]))
+    primary_votes = currency_groups[primary_currency]
+
+    if len(primary_votes) == 1:
+        return PriceConsensus(
+            consensus_price=primary_votes[0].price,
+            currency=primary_currency,
+            votes=primary_votes,
+            outliers=[],
+            confidence=0.5,
+            method="single",
+        )
+
+    prices = [v.price for v in primary_votes]
+    median_price = statistics.median(prices)
+
+    inliers, outliers = _split_outliers(primary_votes, median_price, outlier_threshold)
+    consensus_price = statistics.median([v.price for v in inliers])
+    method, confidence = _consensus_confidence(inliers, outliers, consensus_price)
+
+    return PriceConsensus(
+        consensus_price=consensus_price,
+        currency=primary_currency,
+        votes=inliers,
+        outliers=outliers,
+        confidence=round(confidence, 3),
+        method=method,
+    )
+
+
+def _split_outliers(
+    votes: list[PriceVote], median_price: float, threshold: float,
+) -> tuple[list[PriceVote], list[PriceVote]]:
+    """投票を中央値からの乖離率で inlier / outlier に分類する。"""
+    inliers: list[PriceVote] = []
+    outliers: list[PriceVote] = []
+    for v in votes:
+        deviation = abs(v.price - median_price) / median_price if median_price else 0
+        if deviation <= threshold:
+            inliers.append(v)
+        else:
+            outliers.append(v)
+    if not inliers:
+        return votes, []
+    return inliers, outliers
+
+
+def _consensus_confidence(
+    inliers: list[PriceVote],
+    outliers: list[PriceVote],
+    consensus_price: float,
+) -> tuple[str, float]:
+    """合意方式と信頼度を算出する。"""
+    if not outliers and len(set(round(v.price, 2) for v in inliers)) == 1:
+        return "unanimous", 1.0
+
+    inlier_prices = [v.price for v in inliers]
+    if len(inlier_prices) >= 2:
+        spread = max(inlier_prices) - min(inlier_prices)
+        relative_spread = spread / consensus_price if consensus_price else 0
+        confidence = max(0.5, min(1.0, 1.0 - relative_spread))
+    else:
+        confidence = 0.6
+    if outliers:
+        confidence *= max(0.7, 1.0 - 0.1 * len(outliers))
+    return "median", confidence
+
+
+def _extract_site_name(url: str) -> str:
+    """URL からサイト名を抽出する。"""
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    for name in ("ssense", "farfetch", "mytheresa", "net-a-porter", "24s",
+                 "harrods", "selfridges", "saks", "neiman", "mr porter",
+                 "yoox", "theoutnet", "biffi", "tessabit", "giglio",
+                 "luisaviaroma", "matches", "harvey"):
+        if name.replace("-", "") in host.replace("-", ""):
+            return name
+    return host
+
+
 def style_id_consistent_with_buyma(
     scrape: ScrapedResult,
     buyma_style_id: Optional[str],
@@ -471,5 +613,6 @@ def style_id_consistent_with_buyma(
     """
     if not buyma_style_id or not buyma_style_id.strip():
         return True
-    return scraped_matches_buyma_style(scrape.style_id, buyma_style_id.strip())
+    matched: bool = scraped_matches_buyma_style(scrape.style_id, buyma_style_id.strip())
+    return matched
 

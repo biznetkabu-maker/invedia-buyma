@@ -8,6 +8,67 @@ BUYMA 無在庫バイヤー自動化パイプライン。
 **漏斗運用:** [docs/FUNNEL_OPS.md](docs/FUNNEL_OPS.md)  
 **クイックスタート:** [docs/SIMPLE_START.md](docs/SIMPLE_START.md)
 
+## クイックスタート（5分）
+
+### 1. インストール
+
+```bash
+git clone https://github.com/biznetkabu-maker/invedia-buyma.git
+cd invedia-buyma
+pip install -e ".[dev,browser]"
+playwright install chromium
+```
+
+### 2. 環境変数を設定
+
+`.env.example` をコピーして `.env` を作成：
+
+```bash
+cp .env.example .env
+```
+
+最低限必要な値を入力：
+
+```env
+SPREADSHEET_ID=<Google スプレッドシートの ID>
+GOOGLE_SERVICE_ACCOUNT_JSON=<サービスアカウント JSON の中身>
+WORKSHEET_NAME=02_Purchase_Control
+```
+
+LINE 通知を使う場合（オプション）：
+
+```env
+LINE_CHANNEL_ACCESS_TOKEN=<Messaging API トークン>
+LINE_USER_ID=<送信先の U から始まる ID>
+```
+
+### 3. Google スプレッドシートを準備
+
+1. [Google Sheets](https://sheets.google.com) で新規作成
+2. シート名を `02_Purchase_Control` に変更
+3. サービスアカウント（`client_email`）を「編集者」として共有
+
+### 4. 動作確認
+
+```bash
+pytest -q                    # テスト実行
+python -m lib.main --once    # 1回だけ巡回実行
+```
+
+### 5. 定期巡回（GitHub Actions）
+
+リポジトリの Settings → Secrets and variables → Actions に以下を登録：
+
+| Secret 名 | 値 |
+|-----------|-----|
+| `SPREADSHEET_ID` | スプレッドシート ID |
+| `GOOGLE_CREDENTIALS_JSON` | サービスアカウント JSON 全文 |
+| `WORKSHEET_NAME` | `02_Purchase_Control` |
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE トークン（オプション）|
+| `LINE_USER_ID` | LINE ユーザー ID（オプション）|
+
+登録後、6時間ごと（0/6/12/18時 UTC）に自動巡回が実行されます。
+
 ## 使い方
 
 ```bash

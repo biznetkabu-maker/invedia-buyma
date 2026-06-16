@@ -23,13 +23,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.request import urlopen, Request
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +114,10 @@ def get_all_rates(base: str = "JPY") -> Optional[dict[str, float]]:
     # キャッシュが有効ならそのまま返す
     if _is_cache_valid(cache, cache_key):
         logger.debug("為替レート: キャッシュ使用 (base=%s)", base)
-        return cache[cache_key]["rates"]
+        raw_rates = cache[cache_key].get("rates", {})
+        if isinstance(raw_rates, dict):
+            return {str(k): float(v) for k, v in raw_rates.items()}
+        return None
 
     # API から取得
     rates = _fetch_from_primary(base) or _fetch_from_fallback(base)
@@ -140,9 +142,12 @@ def get_all_rates(base: str = "JPY") -> Optional[dict[str, float]]:
             "為替API取得失敗。古いキャッシュを使用: base=%s "
             "(%.0f 分前のデータ)",
             base,
-            (time.time() - cache[cache_key].get("fetched_at", 0)) / 60,
+            (time.time() - float(str(cache[cache_key].get("fetched_at", 0)))) / 60,
         )
-        return cache[cache_key]["rates"]
+        raw_rates = cache[cache_key].get("rates", {})
+        if isinstance(raw_rates, dict):
+            return {str(k): float(v) for k, v in raw_rates.items()}
+        return None
 
     logger.error("為替レート取得失敗・キャッシュなし: base=%s", base)
     return None
@@ -173,32 +178,31 @@ def _fetch_from_fallback(base: str) -> Optional[dict[str, float]]:
         with urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
             data = json.loads(resp.read().decode())
             if data.get("result") == "success":
-                return data.get("rates", {})
+                rates_raw: dict[str, float] = data.get("rates", {})
+                return rates_raw
     except (URLError, json.JSONDecodeError, KeyError) as e:
         logger.debug("open.er-api フォールバック失敗: %s", e)
     return None
 
 
-def _load_cache() -> dict:
-    try:
-        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+_CacheDict = dict[str, dict[str, object]]
+
+
+def _load_cache() -> _CacheDict:
+    from lib.file_lock import atomic_json_read
+    raw = atomic_json_read(_CACHE_FILE, default={})
+    return {k: v for k, v in raw.items() if isinstance(v, dict)}
 
 
 def _save_cache(cache: dict) -> None:
-    try:
-        _CACHE_FILE.write_text(
-            json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except Exception as e:
-        logger.debug("為替キャッシュ保存失敗: %s", e)
+    from lib.file_lock import atomic_json_write
+    atomic_json_write(_CACHE_FILE, cache)
 
 
-def _is_cache_valid(cache: dict, key: str) -> bool:
+def _is_cache_valid(cache: _CacheDict, key: str) -> bool:
     if key not in cache:
         return False
-    fetched_at = cache[key].get("fetched_at", 0)
+    fetched_at = float(str(cache[key].get("fetched_at", 0)))
     return (time.time() - fetched_at) < _CACHE_TTL_SECONDS
 
 
@@ -217,7 +221,6 @@ def update_sheet_exchange_rates(
     Returns:
         更新に使用したレート辞書。
     """
-    from lib.sheet_manager import COLUMNS
 
     records = manager.get_all_records()
     if not records:

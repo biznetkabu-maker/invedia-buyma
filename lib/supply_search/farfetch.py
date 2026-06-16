@@ -9,7 +9,6 @@ FARFETCH は検索結果を次の形式で返す（2026-05 時点）:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -17,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 from urllib.parse import quote_plus
 
+from lib.async_compat import run_sync
 from lib.supply_search.json_walk import (
     SearchHit,
     collect_hits_from_json_text,
@@ -26,8 +26,8 @@ from lib.supply_search_utils import (
     infer_supply_category_hints,
     infer_supply_department,
     is_footwear_product_name,
-    line_name_search_tokens,
     is_valid_farfetch_product_url,
+    line_name_search_tokens,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,6 +141,34 @@ def parse_farfetch_search_html(html: str) -> list[FarfetchCatalogItem]:
     return _parse_apollo_catalog(html)
 
 
+def _dept_delta(path: str, product_name: str) -> int:
+    """部門（men/women）の一致/不一致による加減点。"""
+    dept = infer_supply_department(product_name)
+    p = path.lower()
+    if dept == "men" and "/men/" in p:
+        return 25
+    if dept == "men" and "/women/" in p:
+        return -35
+    return 0
+
+
+def _footwear_delta(blob: str, product_name: str) -> int:
+    """フットウェア商品向けの加減点（靴以外の誤マッチを抑制）。"""
+    if not is_footwear_product_name(product_name):
+        return 0
+    shoe_kw = ("sandal", "mule", "slide", "shoe", "sneaker", "boot", "trainer", "platform")
+    delta = 0
+    if not any(k in blob for k in shoe_kw):
+        delta -= 55
+    for bad in ("wish", "re-nylon", "wallet", "pouch", "handbag", "tote"):
+        if bad in blob and not any(k in blob for k in ("sandal", "mule", "slide", "shoe")):
+            delta -= 45
+    for token in line_name_search_tokens(product_name):
+        if token in blob:
+            delta += 35
+    return delta
+
+
 def _score_item(
     item: FarfetchCatalogItem,
     *,
@@ -156,11 +184,7 @@ def _score_item(
         if compact and compact in normalize_style_token(blob):
             score += 100
     pos, neg = infer_supply_category_hints(product_name)
-    dept = infer_supply_department(product_name)
-    if dept == "men" and "/men/" in item.path.lower():
-        score += 25
-    elif dept == "men" and "/women/" in item.path.lower():
-        score -= 35
+    score += _dept_delta(item.path, product_name)
     for hint in pos:
         h = hint.lower().replace("-", " ")
         if h in blob or h.replace(" ", "-") in item.path.lower():
@@ -180,18 +204,7 @@ def _score_item(
         x in (product_name or "").lower() for x in ("sunglass", "eyewear", "サングラス", "メガネ")
     ):
         score -= 30
-    if is_footwear_product_name(product_name):
-        if not any(
-            k in blob
-            for k in ("sandal", "mule", "slide", "shoe", "sneaker", "boot", "trainer", "platform")
-        ):
-            score -= 55
-        for bad in ("wish", "re-nylon", "wallet", "pouch", "handbag", "tote"):
-            if bad in blob and not any(k in blob for k in ("sandal", "mule", "slide", "shoe")):
-                score -= 45
-        for token in line_name_search_tokens(product_name):
-            if token in blob:
-                score += 35
+    score += _footwear_delta(blob, product_name)
     if not is_valid_farfetch_product_url(item.url):
         score -= 100
     if item.source == "json_ld_itemlist":
@@ -207,12 +220,12 @@ def rank_farfetch_catalog_items(
     brand: str = "",
     limit: int = 5,
 ) -> list[tuple[FarfetchCatalogItem, int]]:
-    scored = [
-        (item, _score_item(item, style_id=style_id, product_name=product_name, brand=brand))
-        for item in items
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:limit]
+    from lib.supply_search.base_search import rank_catalog_items
+
+    return rank_catalog_items(
+        items, style_id=style_id, product_name=product_name,
+        brand=brand, limit=limit, scorer=_score_item,
+    )
 
 
 def merge_search_hits(
@@ -224,30 +237,13 @@ def merge_search_hits(
     brand: str,
 ) -> list[str]:
     """カタログ + XHR を統合し URL リストを返す。"""
-    urls: list[str] = []
-    seen: set[str] = set()
+    from lib.supply_search.base_search import rank_merge_and_debug
 
-    ranked = rank_farfetch_catalog_items(
-        catalog, style_id=style_id, product_name=product_name, brand=brand, limit=8,
+    urls, _ = rank_merge_and_debug(
+        catalog, xhr_hits, style_id=style_id, product_name=product_name,
+        brand=brand, base_url=_BASE, url_validator=is_valid_farfetch_product_url,
+        scorer=_score_item,
     )
-    for item, score in ranked:
-        if score < 0:
-            continue
-        u = item.url.split("?")[0]
-        if u not in seen and is_valid_farfetch_product_url(u):
-            seen.add(u)
-            urls.append(u)
-
-    xhr_ranked = sorted(xhr_hits, key=lambda h: h.score, reverse=True)
-    for hit in xhr_ranked:
-        u = (hit.url or "").split("?")[0]
-        if not u or u in seen:
-            continue
-        if not is_valid_farfetch_product_url(u):
-            continue
-        seen.add(u)
-        urls.append(u)
-
     return urls
 
 
@@ -323,6 +319,7 @@ async def _lookup_playwright(
     product_name: str = "",
 ) -> tuple[list[str], FarfetchSearchDiagnostics]:
     from playwright.async_api import async_playwright
+
     from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
     diag = FarfetchSearchDiagnostics(
@@ -363,7 +360,7 @@ async def _lookup_playwright(
                                 return
                         xhr_blobs.append(text)
                     except Exception:
-                        pass
+                        logger.debug("Farfetch XHR parse error", exc_info=True)
 
                 page.on("response", on_response)
                 urls, dbg = await search_farfetch_product_urls(
@@ -397,7 +394,7 @@ def lookup_farfetch_search_sync(
     style_id: str = "",
     product_name: str = "",
 ) -> list[str]:
-    urls, _ = asyncio.run(
+    urls, _ = run_sync(
         _lookup_playwright(
             query, brand=brand, style_id=style_id, product_name=product_name,
         )
@@ -412,7 +409,7 @@ def lookup_farfetch_search_diagnose(
     style_id: str = "",
     product_name: str = "",
 ) -> tuple[list[str], FarfetchSearchDiagnostics]:
-    return asyncio.run(
+    return run_sync(
         _lookup_playwright(
             query, brand=brand, style_id=style_id, product_name=product_name,
         )

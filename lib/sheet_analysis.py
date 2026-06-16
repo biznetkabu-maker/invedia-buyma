@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from lib.profit_calculator import ProfitBreakdown, try_calculate_profit
 from lib.sheet_manager import ProductRecord
@@ -78,7 +81,7 @@ def _insight_from_record(
         try:
             profit_val = float(record.利益額)
         except ValueError:
-            pass
+            logger.debug("利益額パース失敗: %s", record.利益額)
     return ProductInsight(
         商品名=record.商品名,
         ブランド=record.ブランド,

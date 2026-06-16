@@ -35,11 +35,14 @@ import io
 import logging
 import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import requests
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +298,6 @@ class BUYMAImageProcessor:
     def _process(
         self, img: "Image.Image", source_url: str, filename: str
     ) -> ProcessedImage:
-        from PIL import Image
 
         logger.debug("背景除去開始: %s (バックエンド: %s)", source_url, self._bg_processor.name)
         fg = self._bg_processor.remove_background(img)
@@ -321,7 +323,7 @@ class BUYMAImageProcessor:
 
     def _compose_background(self, fg_rgba: "Image.Image") -> "Image.Image":
         """前景（透過PNG）に背景を合成する。"""
-        from PIL import Image, ImageDraw, ImageFilter
+        from PIL import Image
 
         style = self._bg_style
         w, h = fg_rgba.size
@@ -430,7 +432,7 @@ def _download_image(url: str, timeout: int = 30) -> bytes:
     }
     resp = requests.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
-    return resp.content
+    return bytes(resp.content)
 
 
 def _image_to_png_bytes(img: "Image.Image") -> bytes:
