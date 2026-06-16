@@ -7,7 +7,7 @@ BUYMA 候補の漏斗（ファネル）自動化ポリシー。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from lib.funnel_policy import (
     POLICY_ID,
@@ -40,7 +40,7 @@ class AutoIntakeOutcome:
     skip_status: str = ""
 
 
-def resolve_sheet_style_id(record: "ProductRecord") -> str:
+def resolve_sheet_style_id(record: ProductRecord) -> str:
     from lib.product_identity import VariantKey
 
     return VariantKey.from_record(record).match_ref
@@ -61,7 +61,7 @@ def is_auto_skip_status(status: str) -> bool:
     return s.startswith(STATUS_AUTO_SKIP_PREFIX)
 
 
-def assess_record_eligibility(record: "ProductRecord") -> FunnelEligibility:
+def assess_record_eligibility(record: ProductRecord) -> FunnelEligibility:
     """シート行が --auto-sheet 対象か（方針A）。"""
     if not funnel_enabled():
         return FunnelEligibility(True)
@@ -108,10 +108,10 @@ def _re_nylon_pouch(name: str) -> bool:
 
 
 def filter_eligible_records(
-    records: list["ProductRecord"],
+    records: list[ProductRecord],
     *,
     limit: int = 0,
-) -> tuple[list["ProductRecord"], list[tuple["ProductRecord", FunnelEligibility]]]:
+) -> tuple[list[ProductRecord], list[tuple[ProductRecord, FunnelEligibility]]]:
     eligible: list[ProductRecord] = []
     skipped: list[tuple[ProductRecord, FunnelEligibility]] = []
     cap = limit if limit > 0 else weekly_auto_limit()
@@ -127,7 +127,7 @@ def filter_eligible_records(
     return eligible, skipped
 
 
-def _preset_supply_urls(record: "ProductRecord") -> list[str]:
+def _preset_supply_urls(record: ProductRecord) -> list[str]:
     from lib.buyma_style_id import is_buyma_item_url
 
     urls = record.candidate_url_list()
@@ -139,7 +139,7 @@ def _preset_supply_urls(record: "ProductRecord") -> list[str]:
 
 
 def mark_auto_skip(
-    manager: Optional["SheetManager"],
+    manager: SheetManager | None,
     product_name: str,
     skip_status: str,
 ) -> bool:

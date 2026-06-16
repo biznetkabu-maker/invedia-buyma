@@ -31,7 +31,7 @@ def atomic_json_read(path: Path, default: Any = None) -> Any:
     if default is None:
         default = {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             fcntl.flock(f, fcntl.LOCK_SH)
             try:
                 return json.load(f)

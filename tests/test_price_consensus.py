@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from lib.multi_source import (
-    PriceConsensus,
     PriceVote,
     SourceCandidate,
-    compute_price_consensus,
     _extract_site_name,
+    compute_price_consensus,
 )
 
 

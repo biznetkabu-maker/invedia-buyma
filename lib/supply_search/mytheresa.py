@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import quote_plus, urljoin
 
 from lib.async_compat import run_sync
@@ -90,9 +90,7 @@ def is_valid_mytheresa_product_url(url: str) -> bool:
     if re.search(r"/(?:search|cart|login|account|wishlist)(?:/|$)", path, re.I):
         return False
     slug = path.rsplit("/", 1)[-1]
-    if slug.count("-") < 1:
-        return False
-    return True
+    return not slug.count("-") < 1
 
 
 def build_mytheresa_search_url(query: str) -> str:
@@ -288,7 +286,7 @@ async def search_mytheresa_product_urls(
     style_id: str = "",
     product_name: str = "",
     wait_ms: int = 5000,
-    xhr_blobs: Optional[list[str]] = None,
+    xhr_blobs: list[str] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     search_url = build_mytheresa_search_url(query)
     debug: dict[str, Any] = {

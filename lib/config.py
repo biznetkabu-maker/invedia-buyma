@@ -61,7 +61,6 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +94,7 @@ class Config:
     medium_profit_threshold: float # 中優先度の利益率しきい値
 
     # 一時ファイルパス（credentials.json を環境変数から生成した場合に使用）
-    _tmp_credentials: Optional[str] = field(default=None, repr=False)
+    _tmp_credentials: str | None = field(default=None, repr=False)
 
     # 運用モード（デフォルト値あり — 必ず非デフォルトフィールドの後に配置）
     operation_mode: str = "monitor"       # "monitor" / "research" / "discovery"
@@ -126,7 +125,7 @@ class Config:
                 os.environ["WORKSHEET_NAME"] = value
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         """環境変数から Config を生成する。
 
         GOOGLE_CREDENTIALS_JSON が設定されている場合は、
@@ -158,7 +157,7 @@ class Config:
         )
 
     @staticmethod
-    def _resolve_credentials() -> tuple[str, Optional[str]]:
+    def _resolve_credentials() -> tuple[str, str | None]:
         """credentials のパスを解決する。
 
         Returns:
@@ -167,7 +166,7 @@ class Config:
         json_str = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
         if json_str:
             # JSON文字列を一時ファイルに書き出す（GitHub Actions用）
-            tmp = tempfile.NamedTemporaryFile(
+            tmp = tempfile.NamedTemporaryFile(  # noqa: SIM115 永続化する一時ファイルのため明示クローズ
                 mode="w", suffix=".json", delete=False
             )
             # 秘密鍵を含むため、所有者のみ読み書き可能に制限する。

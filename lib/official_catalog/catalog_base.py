@@ -22,6 +22,6 @@ class BrandCatalogData:
     url_keys: frozenset[str]
     name_keys: frozenset[str]
     price_keys: frozenset[str]
-    product_path: "re.Pattern[str]"
-    mpn_in_text: "re.Pattern[str]"
-    pdp_url: "re.Pattern[str]"
+    product_path: re.Pattern[str]
+    mpn_in_text: re.Pattern[str]
+    pdp_url: re.Pattern[str]

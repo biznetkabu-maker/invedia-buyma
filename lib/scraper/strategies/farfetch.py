@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Optional
 
 from playwright.async_api import Page
 
@@ -204,9 +203,7 @@ class FARFETCHStrategy(ScraperStrategy):
             iv = int(val)
             if iv == item_id:
                 return True
-            if len(str(item_id)) >= 6 and str(item_id) in str(iv):
-                return True
-            return False
+            return bool(len(str(item_id)) >= 6 and str(item_id) in str(iv))
 
         def collect(o: object, d: int) -> None:
             if d > 14:
@@ -218,7 +215,7 @@ class FARFETCHStrategy(ScraperStrategy):
                         cur = ""
                     try:
                         p = o["price"]
-                        val: Optional[float] = None
+                        val: float | None = None
                         if isinstance(p, (int, float)):
                             val = float(p)
                         elif isinstance(p, str) and re.search(r"\d", p):

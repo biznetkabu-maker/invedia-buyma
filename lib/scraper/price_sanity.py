@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 from urllib.parse import urlparse
 
 
@@ -56,14 +55,12 @@ def price_matches_url_item_id(url: str, local_price: float) -> bool:
     p = int(local_price) if local_price == int(local_price) else int(local_price)
     if p == item_id:
         return True
-    if len(str(item_id)) >= 6 and str(item_id) in str(p):
-        return True
-    return False
+    return bool(len(str(item_id)) >= 6 and str(item_id) in str(p))
 
 
 def estimate_jpy_cost(
     local_price: float,
-    currency: Optional[str],
+    currency: str | None,
     url: str,
     exchange_rate: float,
 ) -> float:
@@ -81,8 +78,8 @@ def estimate_jpy_cost(
 
 
 def is_plausible_supply_price(
-    local_price: Optional[float],
-    currency: Optional[str],
+    local_price: float | None,
+    currency: str | None,
     url: str,
     buyma_price_jpy: float,
     exchange_rate: float,
@@ -95,9 +92,8 @@ def is_plausible_supply_price(
     if price_matches_url_item_id(url, local_price):
         return False
     cur = (currency or infer_currency_from_url(url, raw_price)).upper()
-    if cur == "JPY":
-        if local_price < 2_000 or local_price > 2_500_000:
-            return False
+    if cur == "JPY" and (local_price < 2_000 or local_price > 2_500_000):
+        return False
     if local_price >= 10_000_000:
         return False
     if raw_price and re.match(r"^none\s*\d", raw_price.strip(), re.I):
@@ -113,14 +109,12 @@ def is_plausible_supply_price(
     if ratio > max_ratio or ratio < 0.03:
         return False
     # FARFETCH JP で NEXT_DATA 由来の ¥473,000 等（実売価格の数倍）
-    if cur == "JPY" and buyma_price_jpy < 250_000 and jpy >= 350_000:
-        return False
-    return True
+    return not (cur == "JPY" and buyma_price_jpy < 250000 and jpy >= 350000)
 
 
 def explain_price_rejection(
     local_price: float,
-    currency: Optional[str],
+    currency: str | None,
     url: str,
     buyma_price_jpy: float,
     exchange_rate: float,

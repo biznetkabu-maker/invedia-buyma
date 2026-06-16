@@ -13,9 +13,9 @@ from lib.supply_search_utils import (
     is_valid_farfetch_product_url,
     normalize_brand_name,
     sheet_style_id_value,
+    style_id_for_matching,
     supplemental_search_queries,
     url_is_retail_supply_candidate,
-    style_id_for_matching,
     url_is_valid_supply_candidate,
     url_matches_style_hint,
 )
@@ -222,13 +222,13 @@ class TestSupplySearchUtils(unittest.TestCase):
 
 
     def test_belt_body_bag_queries_and_department(self) -> None:
+        from lib.product_finder import SITE_BY_DOMAIN
         from lib.supply_search_utils import (
+            apply_department_to_search_template,
             build_supply_search_queries,
             infer_supply_category_hints,
             infer_supply_department,
-            apply_department_to_search_template,
         )
-        from lib.product_finder import SITE_BY_DOMAIN
 
         raw = "メンズ ボディバッグ ナイロン ベルトバッグ 2VL977 *SALE"
         self.assertEqual(infer_supply_department(raw), "men")
@@ -271,7 +271,7 @@ class TestSupplySearchUtils(unittest.TestCase):
         self.assertFalse(is_primary_pouch_product_name(raw))
 
     def test_mini_pouch_still_primary_pouch(self) -> None:
-        from lib.supply_search_utils import is_primary_pouch_product_name, category_site_search_extras
+        from lib.supply_search_utils import category_site_search_extras, is_primary_pouch_product_name
         raw = "PRADA◆Re-Nylon ミニポーチ 小物入れ"
         self.assertTrue(is_primary_pouch_product_name(raw))
         self.assertEqual(category_site_search_extras(raw)[0], "pouch")

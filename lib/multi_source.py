@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from lib.async_compat import run_sync
 from lib.profit_calculator import ProfitBreakdown, calculate_profit
@@ -58,16 +58,16 @@ class SourceCandidate:
     """1つの仕入先URLのスクレイピング結果と利益計算の組み合わせ。"""
 
     url: str
-    price: Optional[float]
-    currency: Optional[str]
+    price: float | None
+    currency: str | None
     stock_status: str           # "in_stock" / "out_of_stock" / "unknown"
-    jpy_cost: Optional[float]   # 現地価格 × 為替（FXバッファ込み）
-    profit: Optional[float]
-    profit_rate: Optional[float]
-    breakdown: Optional[ProfitBreakdown]
-    style_id: Optional[str] = None   # 仕入先ページ由来（JSON-LD sku 等）
+    jpy_cost: float | None   # 現地価格 × 為替（FXバッファ込み）
+    profit: float | None
+    profit_rate: float | None
+    breakdown: ProfitBreakdown | None
+    style_id: str | None = None   # 仕入先ページ由来（JSON-LD sku 等）
     scraped_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def is_available(self) -> bool:
@@ -106,10 +106,10 @@ class SourceCandidate:
 class BestSourceResult:
     """複数候補URLを比較した結果。"""
 
-    best: Optional[SourceCandidate]         # 最優良候補（None = 在庫あり候補なし）
+    best: SourceCandidate | None         # 最優良候補（None = 在庫あり候補なし）
     all_candidates: list[SourceCandidate]
     reason: str                             # 選定理由または不選定理由
-    match_score: Optional["MatchScore"] = None  # product_identity（選定後に付与）
+    match_score: MatchScore | None = None  # product_identity（選定後に付与）
 
     @property
     def in_stock_count(self) -> int:
@@ -117,7 +117,7 @@ class BestSourceResult:
         return sum(1 for c in self.all_candidates if c.stock_status == "in_stock")
 
     @property
-    def cheapest_available(self) -> Optional[SourceCandidate]:
+    def cheapest_available(self) -> SourceCandidate | None:
         """在庫ありの中で最安値（現地価格が最小）の候補を返す。"""
         avail = [c for c in self.all_candidates if c.is_available]
         if not avail:
@@ -164,8 +164,9 @@ class BestSourceFinder:
         headless: bool = True,
         timeout_ms: int = 30_000,
         max_retries: int = 1,
-        proxy_rotator: Optional[ProxyRotator] = None,
+        proxy_rotator: ProxyRotator | None = None,
     ) -> None:
+        """ヘッドレス設定・タイムアウト・リトライ回数・プロキシで初期化する。"""
         self._headless = headless
         self._timeout_ms = timeout_ms
         self._max_retries = max_retries
@@ -181,7 +182,7 @@ class BestSourceFinder:
         buyma_price: float,
         exchange_rate: float,
         *,
-        buyma_style_id: Optional[str] = None,
+        buyma_style_id: str | None = None,
         customs_rate: float = 0.10,
         shipping_cost_jpy: float = 2000.0,
         buyma_fee_rate: float = 0.077,
@@ -208,7 +209,7 @@ class BestSourceFinder:
         buyma_price: float,
         exchange_rate: float,
         *,
-        buyma_style_id: Optional[str] = None,
+        buyma_style_id: str | None = None,
         customs_rate: float = 0.10,
         shipping_cost_jpy: float = 2000.0,
         buyma_fee_rate: float = 0.077,
@@ -256,7 +257,7 @@ class BestSourceFinder:
         effective_rate = exchange_rate * (1 + fx_buffer_rate)
         candidates: list[SourceCandidate] = []
 
-        for url, scrape in zip(candidate_urls, scrape_results):
+        for url, scrape in zip(candidate_urls, scrape_results, strict=False):
             candidate = self._build_candidate(
                 url=url,
                 scrape=scrape,
@@ -303,7 +304,7 @@ class BestSourceFinder:
         """ScrapedResult と利益計算を組み合わせて SourceCandidate を生成する。"""
         from lib.scraper.price_sanity import explain_price_rejection, is_plausible_supply_price
 
-        def _err_candidate(error: str, price: Optional[float] = None) -> SourceCandidate:
+        def _err_candidate(error: str, price: float | None = None) -> SourceCandidate:
             return SourceCandidate(
                 url=url, price=price, currency=scrape.currency,
                 stock_status=scrape.stock_status, jpy_cost=None,
@@ -347,8 +348,8 @@ class BestSourceFinder:
     @staticmethod
     def _select_best(
         candidates: list[SourceCandidate],
-        buyma_style_id: Optional[str] = None,
-    ) -> tuple[Optional[SourceCandidate], str]:
+        buyma_style_id: str | None = None,
+    ) -> tuple[SourceCandidate | None, str]:
         """利用可能な候補から最優良を選ぶ。
 
         buyma_style_id が指定されている場合、型番が一致する候補のみ選定対象とする。
@@ -398,10 +399,10 @@ class BestSourceFinder:
         return best, reason
 
 def _compute_match_score(
-    best: Optional[SourceCandidate],
-    buyma_style_id: Optional[str],
+    best: SourceCandidate | None,
+    buyma_style_id: str | None,
     reason: str,
-) -> "MatchScore":
+) -> MatchScore:
     """最優良候補の有無に応じて MatchScore を生成する。"""
     from lib.product_identity import (
         VariantKey,
@@ -488,7 +489,7 @@ def compute_price_consensus(
     candidates: list[SourceCandidate],
     *,
     outlier_threshold: float = 0.15,
-) -> Optional[PriceConsensus]:
+) -> PriceConsensus | None:
     """複数の SourceCandidate から価格コンセンサスを計算する。
 
     同一通貨で価格取得済み・在庫ありの候補から投票を集め、
@@ -605,7 +606,7 @@ def _extract_site_name(url: str) -> str:
 
 def style_id_consistent_with_buyma(
     scrape: ScrapedResult,
-    buyma_style_id: Optional[str],
+    buyma_style_id: str | None,
 ) -> bool:
     """供給側 ScrapedResult.style_id と BUYMA 側の型番が一致するか。
 

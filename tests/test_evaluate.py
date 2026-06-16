@@ -229,12 +229,11 @@ class TestMain:
         assert ret == 0
 
     def test_sheet_without_config_fails(self):
-        with patch("sys.argv", ["evaluate.py", "--sheet"]):
-            with patch("lib.evaluate.Config") as MockConfig:
-                mock_cfg = MagicMock()
-                mock_cfg.validate.return_value = ["SPREADSHEET_ID missing"]
-                MockConfig.from_env.return_value = mock_cfg
-                ret = main()
+        with patch("sys.argv", ["evaluate.py", "--sheet"]), patch("lib.evaluate.Config") as MockConfig:
+            mock_cfg = MagicMock()
+            mock_cfg.validate.return_value = ["SPREADSHEET_ID missing"]
+            MockConfig.from_env.return_value = mock_cfg
+            ret = main()
         assert ret == 1
 
     def test_sheet_success_path(self):

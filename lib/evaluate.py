@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
-from typing import Optional
 
 from lib.config import Config
 from lib.intake_cli import cli_print
@@ -85,7 +84,7 @@ def interactive_mode() -> PurchaseScore:
 
     cli_print("\n── 市場需要 ─────────────────────────────────")
     buyma_rank_str = input("  BUYMAランキング順位（不明は Enter）: ").strip()
-    buyma_rank: Optional[int] = int(buyma_rank_str) if buyma_rank_str else None
+    buyma_rank: int | None = int(buyma_rank_str) if buyma_rank_str else None
     sns_trending        = _prompt_bool("SNSでトレンド中か", False)
     japan_soldout       = _prompt_bool("国内完売か", False)
     japan_exclusive     = _prompt_bool("日本未入荷カラー/サイズか", False)
@@ -139,7 +138,7 @@ def interactive_mode() -> PurchaseScore:
     return evaluator.evaluate(inp)
 
 
-def _record_to_input(record: ProductRecord, config: Config) -> Optional[EvaluationInput]:
+def _record_to_input(record: ProductRecord, config: Config) -> EvaluationInput | None:
     """ProductRecord から EvaluationInput を生成する（物流・需要は不明値で補完）。"""
     try:
         source_price   = float(record.現地価格 or 0)

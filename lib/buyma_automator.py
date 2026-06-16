@@ -33,7 +33,6 @@ import random
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from lib.async_compat import run_sync
 
@@ -114,10 +113,10 @@ class ListingResult:
 
     product_name: str
     success: bool
-    url: Optional[str] = None
-    item_id: Optional[str] = None
-    error: Optional[str] = None
-    listed_at: Optional[datetime] = None
+    url: str | None = None
+    item_id: str | None = None
+    error: str | None = None
+    listed_at: datetime | None = None
 
     def __post_init__(self):
         if self.listed_at is None:
@@ -189,7 +188,7 @@ class BUYMAAutomator:
 
         from lib.scraper.stealth import LAUNCH_ARGS, apply_stealth_scripts, stealth_context_options
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
@@ -490,7 +489,7 @@ class ListingValidationResult:
         return "\n".join(lines)
 
 
-def validate_listing(listing: "ListingData") -> ListingValidationResult:
+def validate_listing(listing: ListingData) -> ListingValidationResult:
     """出品データをバリデートし、エラー・警告を返す。
 
     チェック内容:
@@ -571,7 +570,7 @@ def record_to_listing(
     source_shop: str = "",
     shipping_method: str = "DHL国際宅配便（追跡番号付き）",
     stock_count: int = 1,
-) -> "ListingData":
+) -> ListingData:
     """ProductRecord から ListingData を生成する。
 
     説明文はガイドのテンプレート形式（build_listing_description）で生成する。
@@ -623,7 +622,7 @@ async def _safe_select(page, selector: str, value: str) -> None:
         logger.debug("_safe_select failed [%s]: %s", selector, e)
 
 
-def _extract_item_id(url: str) -> Optional[str]:
+def _extract_item_id(url: str) -> str | None:
     import re
     match = re.search(r"/items?/(\d+)", url)
     return match.group(1) if match else None

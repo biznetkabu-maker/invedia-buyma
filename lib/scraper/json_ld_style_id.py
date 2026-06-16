@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 from playwright.async_api import Page
 
@@ -50,7 +49,7 @@ _COLLECT_PRODUCT_CODES_JS = """() => {
 _CODE_LIKE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-./]{3,39}$")
 
 
-def _pick_primary_style_id(candidates: list[str]) -> Optional[str]:
+def _pick_primary_style_id(candidates: list[str]) -> str | None:
     """英数字中心のコードを優先。無ければ先頭候補（GTIN 等）。"""
     if not candidates:
         return None
@@ -62,7 +61,7 @@ def _pick_primary_style_id(candidates: list[str]) -> Optional[str]:
     return c0 if len(c0) >= 4 else None
 
 
-async def extract_primary_style_id_from_json_ld(page: Page) -> Optional[str]:
+async def extract_primary_style_id_from_json_ld(page: Page) -> str | None:
     """Playwright Page から JSON-LD の識別子を抽出し、代表1件を返す。"""
     try:
         raw = await page.evaluate(_COLLECT_PRODUCT_CODES_JS)

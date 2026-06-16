@@ -10,7 +10,6 @@ from lib.supply_search.farfetch import (
     rank_farfetch_catalog_items,
 )
 
-
 _JSON_LD_HTML = """
 <html><head>
 <script type="application/ld+json">

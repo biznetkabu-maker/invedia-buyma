@@ -12,8 +12,9 @@ import functools
 import logging
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import gspread
 
@@ -105,12 +106,12 @@ class ProductRecord:
         return [u.strip() for u in self.候補URLs.split(",") if u.strip()]
 
     @classmethod
-    def from_row(cls, row: list[str]) -> "ProductRecord":
+    def from_row(cls, row: list[str]) -> ProductRecord:
         """シートの1行リストから ProductRecord を生成する。
         行が列数より短い場合は空文字で補完する。
         """
         padded = (list(row) + [""] * len(COLUMNS))[: len(COLUMNS)]
-        return cls(**dict(zip(COLUMNS, padded)))
+        return cls(**dict(zip(COLUMNS, padded, strict=False)))
 
     def to_row(self) -> list[str]:
         """ProductRecord を列順のリストに変換する。"""
@@ -135,11 +136,12 @@ class SheetManager:
         worksheet_name: str,
         credentials_path: str = "credentials.json",
     ) -> None:
+        """スプレッドシートID・ワークシート名・認証情報パスで初期化する。"""
         self.spreadsheet_id = spreadsheet_id
         self.worksheet_name = worksheet_name
         self._credentials_path = credentials_path
-        self._client: Optional[gspread.Client] = None
-        self._worksheet: Optional[gspread.Worksheet] = None
+        self._client: gspread.Client | None = None
+        self._worksheet: gspread.Worksheet | None = None
 
     # ------------------------------------------------------------------
     # 認証・接続
@@ -174,10 +176,10 @@ class SheetManager:
             client = self._get_client()
             try:
                 spreadsheet = client.open_by_key(self.spreadsheet_id)
-            except SpreadsheetNotFound:
+            except SpreadsheetNotFound as e:
                 raise SpreadsheetNotFound(
                     f"スプレッドシートが見つかりません: {self.spreadsheet_id}"
-                )
+                ) from e
             try:
                 self._worksheet = spreadsheet.worksheet(self.worksheet_name)
             except WorksheetNotFound:
@@ -219,7 +221,7 @@ class SheetManager:
         return [ProductRecord.from_row(row) for row in rows[self.HEADER_ROW :]]
 
     @_sheets_retry()
-    def get_record_by_product_name(self, product_name: str) -> Optional[ProductRecord]:
+    def get_record_by_product_name(self, product_name: str) -> ProductRecord | None:
         """商品名でレコードを1件取得する。
 
         Args:
@@ -251,7 +253,7 @@ class SheetManager:
         query: str,
         *,
         field: str = "商品名",
-        limit: Optional[int] = None,
+        limit: int | None = None,
     ) -> list[ProductRecord]:
         """指定列に query を含むレコードを返す（大文字小文字は区別しない）。
 
@@ -282,7 +284,7 @@ class SheetManager:
         shipping_cost_jpy: float = 2000.0,
         target_profit_rate: float = 0.10,
         top_n: int = 10,
-    ) -> "SheetAnalysisReport":
+    ) -> SheetAnalysisReport:
         """全レコードを分析して SheetAnalysisReport を返す（シートは変更しない）。"""
         from lib.sheet_analysis import analyze_records
 
@@ -453,7 +455,7 @@ class SheetManager:
 
     def recalculate_profit(
         self,
-        exchange_rate: Optional[float] = None,
+        exchange_rate: float | None = None,
         fee_rate: float = 0.077,
         customs_rate: float = 0.10,
         shipping_cost_jpy: float = 2000.0,
@@ -506,7 +508,7 @@ class SheetManager:
     # ユーティリティ
     # ------------------------------------------------------------------
 
-    def _find_row_index(self, product_name: str) -> Optional[int]:
+    def _find_row_index(self, product_name: str) -> int | None:
         """商品名列を走査して1-indexed の行番号を返す。ヘッダーは除外する。"""
         ws = self.get_worksheet()
         col_values = ws.col_values(1)

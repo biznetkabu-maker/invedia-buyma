@@ -40,7 +40,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from lib.multi_source import BestSourceResult
@@ -308,7 +308,7 @@ from lib.intake_auto import auto_intake_from_buyma as auto_intake_from_buyma  # 
 from lib.intake_auto import auto_intake_from_sheet as auto_intake_from_sheet  # noqa: E402
 
 
-def _open_sheet_manager() -> Optional[SheetManager]:
+def _open_sheet_manager() -> SheetManager | None:
     """Config を検証し SheetManager を返す。失敗時は None。"""
     try:
         from lib.config import Config
@@ -418,7 +418,7 @@ def _run_demand_check(
     brand: str,
     product_name: str,
     *,
-    display_name: Optional[str] = None,
+    display_name: str | None = None,
 ) -> BUYMADemandSignal:
     """BUYMA 需要確認を実行する。失敗時はゼロ値シグナルを返す。"""
     label = display_name or f"{brand} {product_name}"
@@ -491,7 +491,7 @@ def _collect_buyma_style_id() -> str:
     return ""
 
 
-def _print_style_id_report(result: "BestSourceResult", buyma_style_id: str) -> None:
+def _print_style_id_report(result: BestSourceResult, buyma_style_id: str) -> None:
     """スクレイプ各候補の style_id と BUYMA 型番の一致状況を表示する。"""
     if not (buyma_style_id or "").strip():
         return
@@ -518,8 +518,8 @@ def _scrape_and_select(
     exchange_rate: float,
     buyma_style_id: str = "",
     brand: str = "",
-    variant: Optional["VariantKey"] = None,
-) -> tuple[str, float, Optional["MatchScore"], str, str]:
+    variant: VariantKey | None = None,
+) -> tuple[str, float, MatchScore | None, str, str]:
     """複数候補URLをスクレイプして最安値・在庫ありを選択する。
     buyma_style_id がある場合、型番一致した候補のみ最優良選定の対象とする。
     失敗時は空URLと価格0を返す。MatchScore は product_identity で付与。
@@ -592,11 +592,11 @@ def _scrape_and_select(
 
 
 def _select_fallback_candidate(
-    result: "BestSourceResult",
+    result: BestSourceResult,
     buyma_style_id: str,
     buyma_price: float,
     exchange_rate: float,
-) -> tuple[str, float, Optional["MatchScore"], str, str]:
+) -> tuple[str, float, MatchScore | None, str, str]:
     """best が無い場合に在庫なし候補から型番一致・妥当価格のものを選ぶ。"""
     from lib.scraper.price_sanity import is_plausible_supply_price
     from lib.style_id_utils import scraped_matches_buyma_style

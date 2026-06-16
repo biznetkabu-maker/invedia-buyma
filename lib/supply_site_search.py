@@ -10,7 +10,6 @@ import logging
 import re
 import urllib.parse
 import urllib.request
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +141,7 @@ def discover_urls_by_style_id(
     *,
     product_name: str = "",
     domains: tuple[str, ...] = _DEFAULT_DOMAINS,
-    log_lines: Optional[list[str]] = None,
+    log_lines: list[str] | None = None,
     max_per_domain: int = 1,
 ) -> list[str]:
     """型番ベースの site: 検索。有効な商品 URL のみ返す。"""

@@ -21,9 +21,10 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 
 import requests
+
+from lib import http_client
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +47,8 @@ class TreasureAlert:
     profit_rate: float
     source_url: str
     stock_status: str
-    image_url: Optional[str] = None
-    grade: Optional[str] = None   # PurchaseEvaluator のグレード
+    image_url: str | None = None
+    grade: str | None = None   # PurchaseEvaluator のグレード
 
     @property
     def profit_jpy_str(self) -> str:
@@ -62,7 +63,7 @@ class TreasureAlert:
 class NotificationResult:
     success: bool
     method: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # ============================================================================
@@ -95,10 +96,10 @@ class LINENotifyClient:
     def send(
         self,
         message: str,
-        image_url: Optional[str] = None,
-        image_thumbnail: Optional[str] = None,
-        sticker_package_id: Optional[int] = None,
-        sticker_id: Optional[int] = None,
+        image_url: str | None = None,
+        image_thumbnail: str | None = None,
+        sticker_package_id: int | None = None,
+        sticker_id: int | None = None,
     ) -> NotificationResult:
         """LINE Notify でメッセージを送信する。
 
@@ -123,7 +124,7 @@ class LINENotifyClient:
             data["stickerId"] = sticker_id
 
         try:
-            resp = requests.post(
+            resp = http_client.post(
                 _LINE_NOTIFY_ENDPOINT, headers=headers, data=data, timeout=15
             )
             resp.raise_for_status()
@@ -175,7 +176,7 @@ class LINEMessagingClient:
             "messages": [{"type": "text", "text": message[:5000]}],
         }
         try:
-            resp = requests.post(
+            resp = http_client.post(
                 _LINE_MESSAGING_API,
                 headers={
                     "Authorization": f"Bearer {self._token}",
@@ -211,7 +212,7 @@ class LINEMessagingClient:
         }
 
         try:
-            resp = requests.post(
+            resp = http_client.post(
                 _LINE_MESSAGING_API,
                 headers={
                     "Authorization": f"Bearer {self._token}",

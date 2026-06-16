@@ -1,7 +1,6 @@
 """file_lock のユニットテスト。"""
 
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path

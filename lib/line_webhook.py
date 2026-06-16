@@ -350,8 +350,8 @@ def create_app():
     """Flask アプリを生成する。"""
     try:
         from flask import Flask, abort, request
-    except ImportError:
-        raise ImportError("Flask が未インストールです: pip install flask")
+    except ImportError as e:
+        raise ImportError("Flask が未インストールです: pip install flask") from e
 
     app = Flask(__name__)
 

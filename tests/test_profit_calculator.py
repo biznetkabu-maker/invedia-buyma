@@ -2,7 +2,7 @@
 
 import unittest
 
-from lib.profit_calculator import ProfitBreakdown, calculate_profit, try_calculate_profit
+from lib.profit_calculator import calculate_profit, try_calculate_profit
 
 
 class TestCalculateProfit(unittest.TestCase):

@@ -14,7 +14,7 @@ BUYMA向け商品画像処理モジュール。
     class NanoBanana2Processor(BackgroundProcessor):
         def remove_background(self, image: Image.Image) -> Image.Image:
             # Nano Banana 2 APIを呼び出す
-            resp = requests.post(
+            resp = http_client.post(
                 "https://api.nanobanana2.example.com/remove-bg",
                 files={"image": image_to_bytes(image)},
                 headers={"Authorization": f"Bearer {self._api_key}"},
@@ -37,9 +37,9 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-import requests
+from lib import http_client
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -64,7 +64,7 @@ class BackgroundProcessor(ABC):
     """
 
     @abstractmethod
-    def remove_background(self, image: "Image.Image") -> "Image.Image":
+    def remove_background(self, image: Image.Image) -> Image.Image:
         """背景を除去して RGBA 画像を返す。"""
         ...
 
@@ -80,15 +80,15 @@ class RembgProcessor(BackgroundProcessor):
     ネット環境が必要。
     """
 
-    def remove_background(self, image: "Image.Image") -> "Image.Image":
+    def remove_background(self, image: Image.Image) -> Image.Image:
         try:
             from rembg import remove
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "rembg が未インストールです。\n"
                 "  pip install rembg[gpu]  # GPU環境\n"
                 "  pip install rembg       # CPU環境"
-            )
+            ) from e
 
         from PIL import Image
         img_bytes = _image_to_png_bytes(image)
@@ -106,10 +106,10 @@ class RemoveBgAPIProcessor(BackgroundProcessor):
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key
 
-    def remove_background(self, image: "Image.Image") -> "Image.Image":
+    def remove_background(self, image: Image.Image) -> Image.Image:
         from PIL import Image
         img_bytes = _image_to_png_bytes(image)
-        resp = requests.post(
+        resp = http_client.post(
             "https://api.remove.bg/v1.0/removebg",
             files={"image_file": ("image.png", img_bytes, "image/png")},
             data={"size": "auto"},
@@ -140,10 +140,10 @@ class NanoBanana2Processor(BackgroundProcessor):
         if not self._api_key:
             logger.warning("NANO_BANANA2_API_KEY が設定されていません。")
 
-    def remove_background(self, image: "Image.Image") -> "Image.Image":
+    def remove_background(self, image: Image.Image) -> Image.Image:
         from PIL import Image
         img_bytes = _image_to_png_bytes(image)
-        resp = requests.post(
+        resp = http_client.post(
             self.DEFAULT_ENDPOINT,
             files={"image": ("image.png", img_bytes, "image/png")},
             headers={"Authorization": f"Bearer {self._api_key}"},
@@ -201,7 +201,7 @@ class ProcessedImage:
     file_size_bytes: int
     format: str
     success: bool
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def file_size_mb(self) -> float:
@@ -234,7 +234,7 @@ class BUYMAImageProcessor:
 
     def __init__(
         self,
-        bg_processor: Optional[BackgroundProcessor] = None,
+        bg_processor: BackgroundProcessor | None = None,
         bg_style: BackgroundStyle = BUYMA_DEFAULT_BG,
         output_dir: str = "",
         output_size: int = 0,
@@ -296,7 +296,7 @@ class BUYMAImageProcessor:
     # ------------------------------------------------------------------
 
     def _process(
-        self, img: "Image.Image", source_url: str, filename: str
+        self, img: Image.Image, source_url: str, filename: str
     ) -> ProcessedImage:
 
         logger.debug("背景除去開始: %s (バックエンド: %s)", source_url, self._bg_processor.name)
@@ -321,7 +321,7 @@ class BUYMAImageProcessor:
             success=True,
         )
 
-    def _compose_background(self, fg_rgba: "Image.Image") -> "Image.Image":
+    def _compose_background(self, fg_rgba: Image.Image) -> Image.Image:
         """前景（透過PNG）に背景を合成する。"""
         from PIL import Image
 
@@ -345,7 +345,7 @@ class BUYMAImageProcessor:
         bg = Image.alpha_composite(bg, fg_rgba)
         return bg.convert("RGB")
 
-    def _resize_for_buyma(self, img: "Image.Image") -> "Image.Image":
+    def _resize_for_buyma(self, img: Image.Image) -> Image.Image:
         """BUYMAの仕様に合わせてリサイズする。"""
         from PIL import Image
 
@@ -383,7 +383,7 @@ class BUYMAImageProcessor:
         final_size = min(target, canvas_size)
         return canvas.resize((final_size, final_size), Image.LANCZOS)
 
-    def _save(self, img: "Image.Image", filename: str) -> Path:
+    def _save(self, img: Image.Image, filename: str) -> Path:
         """画像を保存し、ファイルサイズが上限内に収まるよう品質を調整する。"""
         output_path = self._output_dir / f"{filename}.jpg"
         quality = self._jpeg_quality
@@ -430,12 +430,12 @@ def _download_image(url: str, timeout: int = 30) -> bytes:
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
     }
-    resp = requests.get(url, headers=headers, timeout=timeout)
+    resp = http_client.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
     return bytes(resp.content)
 
 
-def _image_to_png_bytes(img: "Image.Image") -> bytes:
+def _image_to_png_bytes(img: Image.Image) -> bytes:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -444,7 +444,7 @@ def _image_to_png_bytes(img: "Image.Image") -> bytes:
 def _create_gradient(
     w: int, h: int,
     top_color: tuple, bottom_color: tuple
-) -> "Image.Image":
+) -> Image.Image:
     from PIL import Image
     base = Image.new("RGBA", (w, h))
     for y in range(h):
@@ -458,7 +458,7 @@ def _create_gradient(
     return base
 
 
-def _create_shadow(fg: "Image.Image", opacity: int) -> "Image.Image":
+def _create_shadow(fg: Image.Image, opacity: int) -> Image.Image:
     from PIL import Image, ImageFilter
     shadow_layer = Image.new("RGBA", fg.size, (0, 0, 0, 0))
     if fg.mode != "RGBA":

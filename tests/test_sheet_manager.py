@@ -6,9 +6,9 @@ unittest.mock を使って全外部依存をスタブ化します。
 """
 
 import unittest
-from unittest.mock import MagicMock, patch, call
-from lib.sheet_manager import SheetManager, ProductRecord, COLUMNS
+from unittest.mock import MagicMock
 
+from lib.sheet_manager import COLUMNS, ProductRecord, SheetManager
 
 # ---------------------------------------------------------------------------
 # ヘルパー: テスト用のモックワークシートを生成

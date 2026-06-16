@@ -6,16 +6,13 @@ record_to_listing, BUYMAAutomator のテスト。
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from lib.buyma_automator import (
     BUYMAAutomator,
     ListingData,
     ListingResult,
     ListingValidationResult,
-    build_listing_description,
-    record_to_listing,
-    validate_listing,
     _extract_item_id,
     _load_session_cookies,
     _random_jitter,
@@ -23,6 +20,9 @@ from lib.buyma_automator import (
     _safe_fill,
     _safe_select,
     _save_session_cookies,
+    build_listing_description,
+    record_to_listing,
+    validate_listing,
 )
 from lib.sheet_manager import ProductRecord
 

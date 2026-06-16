@@ -7,8 +7,7 @@ _write_results_to_sheet, _send_notifications, run のテスト。
 import asyncio
 import unittest
 from dataclasses import replace
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from lib.config import Config
 from lib.main import (
@@ -21,7 +20,6 @@ from lib.main import (
     _write_results_to_sheet,
     run,
 )
-from lib.scraper.models import ScrapedResult
 from lib.sheet_manager import ProductRecord
 
 

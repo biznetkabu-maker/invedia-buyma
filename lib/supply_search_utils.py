@@ -8,8 +8,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
-from urllib.parse import urlparse
 
 from lib.brand_utils import (  # noqa: F401  -- re-export
     _brand_from_bracket_tags,
@@ -208,6 +206,7 @@ _POUCH_ACCESSORY_MARKERS = (
 
 
 def is_footwear_product_name(product_name: str) -> bool:
+    """商品名が靴類（スニーカー・サンダル等）かを判定する。"""
     name_l = (product_name or "").lower()
     return any(k in name_l for k in _FOOTWEAR_KEYS)
 
@@ -241,6 +240,7 @@ def line_name_search_tokens(product_name: str, official_english_name: str = "") 
 
 
 def footwear_search_extras(product_name: str) -> list[str]:
+    """靴類の種別に応じた追加検索キーワードを返す。"""
     name_l = (product_name or "").lower()
     if any(k in name_l for k in ("スニーカー", "sneaker", "trainer")):
         return ["sneaker", "sneakers", "shoes"]
@@ -255,6 +255,7 @@ def footwear_search_extras(product_name: str) -> list[str]:
 
 
 def is_fragment_case_product_name(product_name: str) -> bool:
+    """商品名がフラグメントケース・カードケース類かを判定する。"""
     name_l = (product_name or "").lower()
     return any(
         k in name_l
@@ -286,7 +287,7 @@ _SIMPLE_CATEGORY_RULES: tuple[tuple[tuple[str, ...], list[str]], ...] = (
 )
 
 
-def _bucket_extras(name_l: str) -> Optional[list[str]]:
+def _bucket_extras(name_l: str) -> list[str] | None:
     """バケット / ウィッカー系のカテゴリ語。該当しなければ None。"""
     wicker = _has(name_l, "ウィッカー", "wicker", "ラタン", "rattan")
     if not (_has(name_l, "バケット", "bucket bag", "bucket-bag", "bucket") or wicker):
@@ -528,9 +529,9 @@ def _append_style_id_queries(
 def build_supply_search_queries(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
     *,
-    raw_product_name: Optional[str] = None,
+    raw_product_name: str | None = None,
     official_english_name: str = "",
 ) -> list[str]:
     """仕入先検索に使うクエリを優先順で列挙する。"""
@@ -573,8 +574,8 @@ def build_supply_search_queries(
 
 def resolve_style_id_for_supply_search(
     product_name: str,
-    style_id: Optional[str] = None,
-) -> Optional[str]:
+    style_id: str | None = None,
+) -> str | None:
     """仕入先検索用。タイトル中の型番を優先し、長い数字のみの BUYMA ID は使わない。"""
     codes = extract_model_codes(product_name, style_id or "")
     if codes:
@@ -588,7 +589,7 @@ def resolve_style_id_for_supply_search(
 def best_demand_search_phrase(
     brand: str,
     product_name: str,
-    style_id: Optional[str] = None,
+    style_id: str | None = None,
 ) -> str:
     """BUYMA 需要検索用の短いフレーズ。"""
     queries = build_supply_search_queries(brand, product_name, style_id)
@@ -598,7 +599,7 @@ def best_demand_search_phrase(
     return f"{brand} {cleaned}".strip() if cleaned else brand
 
 
-def sheet_style_id_value(product_name: str, style_id: Optional[str] = None) -> str:
+def sheet_style_id_value(product_name: str, style_id: str | None = None) -> str:
     """シートの型番列・照合用。モデル番号を優先。BUYMA 商品 ID のみの場合は空。"""
     resolved = resolve_style_id_for_supply_search(product_name, style_id)
     if resolved:
@@ -608,229 +609,17 @@ def sheet_style_id_value(product_name: str, style_id: Optional[str] = None) -> s
         return sid
     return ""
 
-_DISALLOWED_SUPPLY_PATH = re.compile(
-    r"pre-?owned|vintage|second-hand|used-wear|outlet|archive-sale",
-    re.I,
+
+# 仕入先 URL の妥当性判定は supply_url_rules に分離（後方互換のため re-export）
+from lib.supply_url_rules import (  # noqa: E402,F401
+    filter_scrape_candidate_urls,
+    is_valid_farfetch_product_url,
+    rank_supply_urls_for_discovery,
+    style_id_for_matching,
+    url_has_category_path_mismatch,
+    url_has_line_or_style_slug_match,
+    url_is_retail_supply_candidate,
+    url_is_valid_supply_candidate,
+    url_matches_style_hint,
+    url_requires_line_or_style_slug,
 )
-
-
-def url_is_retail_supply_candidate(url: str) -> bool:
-    """中古・アウトレット系の商品URLを除外（新品仕入れ向け）。"""
-    return not _DISALLOWED_SUPPLY_PATH.search(url or "")
-
-
-_FARFETCH_ITEM_PATH = re.compile(
-    r"(?:/[a-z]{2})?/shopping/(?:women|men)/(.+)-item-(\d+)\.aspx$",
-    re.I,
-)
-
-
-def is_valid_farfetch_product_url(url: str) -> bool:
-    """FARFETCH 商品 URL の形式チェック（検索結果の壊れた slug を除外）。"""
-    path = urlparse(url).path
-    if not path.lower().endswith(".aspx"):
-        return False
-    if "--" in path:
-        return False
-    m = _FARFETCH_ITEM_PATH.search(path)
-    if not m:
-        return False
-    slug, item_id = m.group(1), m.group(2)
-    if len(item_id) < 5:
-        return False
-    if any(not p for p in slug.split("-")):
-        return False
-    parts = [p for p in slug.split("-") if p]
-    if len(parts) < 2 or len(slug) < 8:
-        return False
-    return True
-
-
-def url_matches_style_hint(style_id: str, url: str) -> bool:
-    """型番が分かっているとき、URL に型番らしき文字列が無い候補を除外。
-
-    ページ内 JSON-LD のみに型番がある商品もあるため、妥当な型番のみ検査する。
-    """
-    sid = (style_id or "").strip()
-    if not sid or not is_plausible_model_code(sid):
-        return True
-    compact = re.sub(r"[^a-z0-9]", "", sid.lower())
-    if len(compact) < 5:
-        return True
-    path_compact = re.sub(r"[^a-z0-9]", "", urlparse(url).path.lower())
-    return compact in path_compact
-
-
-def style_id_for_matching(sheet_style_id: str, buyma_style_id: str = "") -> str:
-    """型番照合・選定用。BUYMA 商品 ID（数字のみ）や空は使わない。"""
-    sid = (sheet_style_id or "").strip()
-    if sid and is_plausible_model_code(sid):
-        return sid
-    legacy = (buyma_style_id or "").strip()
-    if legacy and is_plausible_model_code(legacy):
-        return legacy
-    return ""
-
-
-def filter_scrape_candidate_urls(
-    brand: str,
-    urls: list[str],
-    *,
-    style_id: str = "",
-) -> tuple[list[str], list[str]]:
-    """スクレイプ前に仕入先 URL を検証し、(有効, 除外) を返す。"""
-    ok: list[str] = []
-    rejected: list[str] = []
-    for u in urls:
-        if url_is_valid_supply_candidate(brand, u, style_id=style_id):
-            ok.append(u)
-        else:
-            rejected.append(u)
-    return ok, rejected
-
-
-def rank_supply_urls_for_discovery(
-    urls: list[str],
-    *,
-    style_id: str = "",
-    product_name: str = "",
-) -> list[str]:
-    """探索用 URL の優先順位付け（型番スラッグ一致 > カテゴリ語 > その他）。"""
-    sid = (style_id or "").strip()
-    category_hints, mismatch_hints = infer_supply_category_hints(product_name)
-
-    def score(url: str) -> int:
-        s = 0
-        path = urlparse(url).path.lower()
-        if sid and url_matches_style_hint(sid, url):
-            s += 200
-        for i, hint in enumerate(category_hints):
-            if hint in path:
-                s += 50 - i
-        for bad in mismatch_hints:
-            if bad in path:
-                s -= 150
-        if "pre-owned" in path or "vintage" in path:
-            s -= 100
-        return s
-
-    return sorted(urls, key=score, reverse=True)
-
-
-_GENERIC_BAG_HINTS = frozenset({"bag", "shoulder", "tote"})
-
-
-def _requires_specific_path_match(product_name: str, positive: list[str]) -> bool:
-    """バケット/ウィッカー等 — URL にカテゴリ語が無い候補を拒否する。"""
-    name_l = (product_name or "").lower()
-    if is_footwear_product_name(product_name):
-        return False
-    if any(
-        k in name_l
-        for k in (
-            "バケット", "bucket", "ウィッカー", "wicker", "ラタン", "rattan",
-            "ハンドバッグ", "handbag", "hand bag", "hand-bag",
-            "ベルトバッグ", "ボディバッグ", "belt bag", "body bag", "bum bag",
-            "フラグメント", "fragment", "カードケース", "card-case", "card-holder",
-            "名刺",
-        )
-    ):
-        return True
-    return len([h for h in positive if h not in _GENERIC_BAG_HINTS]) >= 2
-
-
-def url_has_line_or_style_slug_match(
-    product_name: str, style_id: str, url: str,
-) -> bool:
-    """Step3 用 — URL スラッグが型番・ライン名・（非フットウェアは）カテゴリ語と一致。"""
-    sid = (style_id or "").strip()
-    if sid and url_matches_style_hint(sid, url):
-        return True
-    path = urlparse(url).path.lower()
-    path_norm = path.replace("-", " ")
-
-    def path_has(token: str) -> bool:
-        t = token.lower().replace("-", " ")
-        return t in path or t in path_norm
-
-    for token in line_name_search_tokens(product_name):
-        if token in path:
-            return True
-    if is_footwear_product_name(product_name):
-        return False
-    positive, _ = infer_supply_category_hints(product_name)
-    return any(path_has(hint) for hint in positive)
-
-
-def url_requires_line_or_style_slug(product_name: str, style_id: str) -> bool:
-    """Step3 で汎用カテゴリ URL（別 SKU の sandal 等）を拾わない。"""
-    sid = (style_id or "").strip()
-    if not sid or not is_plausible_model_code(sid):
-        return False
-    if is_footwear_product_name(product_name):
-        return True
-    return _requires_specific_path_match(
-        product_name, infer_supply_category_hints(product_name)[0]
-    )
-
-
-def url_has_category_path_mismatch(product_name: str, url: str) -> bool:
-    """URL パスが商品カテゴリと明らかに矛盾するか（eyewear vs bag 等）。"""
-    if not (product_name or "").strip() or not url:
-        return False
-    positive, negative = infer_supply_category_hints(product_name)
-    path = urlparse(url).path.lower()
-    path_norm = path.replace("-", " ")
-
-    def path_has(token: str) -> bool:
-        t = token.lower().replace("-", " ")
-        return t in path or t in path_norm
-
-    if _requires_specific_path_match(product_name, positive):
-        if not any(path_has(hint) for hint in positive):
-            return True
-
-    if not negative:
-        return False
-
-    mismatches = [bad for bad in negative if path_has(bad)]
-    if not mismatches:
-        return False
-    if any(path_has(hint) for hint in positive):
-        return False
-    return True
-
-
-def url_is_valid_supply_candidate(
-    brand: str, url: str, *, style_id: str = "", require_style_in_url: bool = False,
-    product_name: str = "",
-) -> bool:
-    """仕入先 URL が探索・スクレイプ候補として妥当か。
-
-    require_style_in_url=False（既定）では型番が URL に無くても通す。
-    別 SKU の除外はスクレイプ後の JSON-LD 型番照合（BestSourceFinder）に任せる。
-    """
-    if not url_matches_brand(brand, url):
-        return False
-    if not url_is_retail_supply_candidate(url):
-        return False
-    if product_name and url_has_category_path_mismatch(product_name, url):
-        return False
-    if (
-        product_name
-        and style_id
-        and url_requires_line_or_style_slug(product_name, style_id)
-        and not url_has_line_or_style_slug_match(product_name, style_id, url)
-    ):
-        return False
-    if "farfetch.com" in (url or "").lower():
-        if not is_valid_farfetch_product_url(url):
-            return False
-        if require_style_in_url and style_id and not url_matches_style_hint(
-            style_id, url
-        ):
-            return False
-        return True
-    if require_style_in_url and style_id and not url_matches_style_hint(style_id, url):
-        return False
-    return True

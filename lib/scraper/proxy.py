@@ -34,7 +34,6 @@ import os
 import random
 import time
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -58,7 +57,7 @@ class ProxyConfig:
         return config
 
     @classmethod
-    def from_url(cls, url: str) -> "ProxyConfig":
+    def from_url(cls, url: str) -> ProxyConfig:
         """'http://user:pass@host:port' 形式の URL から ProxyConfig を生成する。"""
         parsed = urlparse(url)
         server = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
@@ -77,7 +76,7 @@ class ProxyConfig:
         country: str = "",
         host: str = "zproxy.lum-superproxy.io",
         port: int = 22225,
-    ) -> "ProxyConfig":
+    ) -> ProxyConfig:
         """Bright Data (旧 Luminati) 形式の ProxyConfig を生成する。
 
         Args:
@@ -103,7 +102,7 @@ class ProxyConfig:
         password: str,
         host: str = "gate.smartproxy.com",
         port: int = 7000,
-    ) -> "ProxyConfig":
+    ) -> ProxyConfig:
         """Smartproxy 形式の ProxyConfig を生成する。"""
         return cls(
             server=f"http://{host}:{port}",
@@ -140,7 +139,7 @@ class ProxyRotator:
         self._fail_times: dict[str, float] = {}
         self._fail_counts: dict[str, int] = {}
 
-    def next(self) -> Optional[ProxyConfig]:
+    def next(self) -> ProxyConfig | None:
         """次のプロキシを返す。プロキシ未設定の場合は None を返す。
 
         ヘルスチェック結果を考慮し、不健全なプロキシをスキップする。
@@ -226,7 +225,7 @@ class ProxyRotator:
         return len(self._proxies)
 
     @classmethod
-    def from_env(cls) -> "ProxyRotator":
+    def from_env(cls) -> ProxyRotator:
         """環境変数からプロキシ設定を読み込む。
 
         優先順位:

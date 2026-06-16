@@ -29,7 +29,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 from urllib.parse import quote_plus
 
 # ============================================================================
@@ -217,7 +216,7 @@ class SearchURLSet:
 def build_search_urls(
     brand: str,
     product_name: str,
-    sites: Optional[list[str]] = None,
+    sites: list[str] | None = None,
 ) -> SearchURLSet:
     """ブランド名・商品名から全サイトの検索URLを生成する。
 

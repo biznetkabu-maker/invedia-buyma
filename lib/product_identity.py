@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal
 
 from lib.style_id_utils import scraped_matches_buyma_style
 
@@ -36,10 +36,12 @@ class VariantKey:
 
     @property
     def has_match_ref(self) -> bool:
+        """照合に使える型番があるかを返す。"""
         return bool((self.style_id or "").strip())
 
     @property
     def match_ref(self) -> str:
+        """照合用の型番文字列（前後空白除去）を返す。"""
         return (self.style_id or "").strip()
 
     @classmethod
@@ -53,7 +55,7 @@ class VariantKey:
         raw_product_name: str = "",
         raw_title: str = "",
         category: str = "",
-    ) -> "VariantKey":
+    ) -> VariantKey:
         """シート・BUYMA・商品名から照合用型番を確定する。"""
         from lib.supply_search_utils import (
             normalize_brand_name,
@@ -88,7 +90,8 @@ class VariantKey:
         )
 
     @classmethod
-    def from_record(cls, record: "ProductRecord") -> "VariantKey":
+    def from_record(cls, record: ProductRecord) -> VariantKey:
+        """ProductRecord から VariantKey を生成する。"""
         return cls.resolve(
             brand=record.ブランド,
             product_name=record.商品名,
@@ -109,6 +112,7 @@ class MatchScore:
         return self.grade in _GRADES_AUTO_OK
 
     def format_console(self) -> str:
+        """同一性スコアをコンソール表示用の複数行文字列に整形する。"""
         lines = [f"  【同一性スコア】 {self.grade}"]
         if self.identity_note:
             lines.append(f"    同一性: {self.identity_note}")
@@ -131,7 +135,7 @@ def score_from_best_candidate(
     variant: VariantKey,
     *,
     url: str = "",
-    scraped_style_id: Optional[str] = None,
+    scraped_style_id: str | None = None,
     stock_status: str = "unknown",
     price_ok: bool = False,
     price_note: str = "",
@@ -184,10 +188,7 @@ def score_from_best_candidate(
         )
 
     if not in_stock:
-        if grade_ok:
-            g = "B"
-        else:
-            g = "C"
+        g = "B" if grade_ok else "C"
         return MatchScore(
             grade=g,
             identity_note="; ".join(identity_parts) + f"; 在庫={stock_status}",
@@ -233,7 +234,7 @@ def summarize_best_source_result(
     variant: VariantKey,
     *,
     best_url: str = "",
-    best_style_id: Optional[str] = None,
+    best_style_id: str | None = None,
     best_stock: str = "unknown",
     best_price_ok: bool = False,
     best_price_note: str = "",

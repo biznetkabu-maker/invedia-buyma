@@ -14,19 +14,18 @@ import unittest
 from unittest.mock import patch
 
 from lib.buyma_demand import (
-    BUYMADemandSignal,
     BUYMADemandScraper,
+    BUYMADemandSignal,
+    _extract_all_jpy_prices,
+    _extract_jpy_price,
     _extract_number,
     _extract_number_with_keyword,
-    _extract_jpy_price,
-    _extract_all_jpy_prices,
 )
 from lib.product_finder import (
-    build_search_urls,
     ALL_SITES,
     SITE_BY_DOMAIN,
+    build_search_urls,
     site_name_from_url,
-    SiteDefinition,
 )
 
 

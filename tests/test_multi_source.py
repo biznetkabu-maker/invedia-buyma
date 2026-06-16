@@ -12,15 +12,15 @@ import asyncio
 import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+from lib.buyma_researcher import BUYMAResearcher, ResearchCandidate, _build_search_urls, _parse_int
 from lib.multi_source import (
     BestSourceFinder,
     BestSourceResult,
     SourceCandidate,
 )
-from lib.buyma_researcher import BUYMAResearcher, ResearchCandidate, _parse_int, _build_search_urls
-from lib.sheet_manager import ProductRecord, COLUMNS
+from lib.sheet_manager import COLUMNS, ProductRecord
 
 
 def _run(coro):

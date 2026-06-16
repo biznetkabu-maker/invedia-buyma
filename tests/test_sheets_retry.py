@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from gspread.exceptions import APIError
+
 from lib.sheet_manager import _sheets_retry
 
 

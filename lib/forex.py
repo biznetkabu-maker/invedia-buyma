@@ -26,7 +26,6 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -46,7 +45,7 @@ SUPPORTED_CURRENCIES = {"USD", "EUR", "GBP", "CAD", "AUD", "CHF", "JPY", "CNY", 
 
 # ── 公開 API ─────────────────────────────────────────────────────────────────
 
-def get_rate(from_currency: str, to_currency: str = "JPY") -> Optional[float]:
+def get_rate(from_currency: str, to_currency: str = "JPY") -> float | None:
     """指定通貨の最新レートを取得する。
 
     Args:
@@ -66,7 +65,7 @@ def get_rate(from_currency: str, to_currency: str = "JPY") -> Optional[float]:
     return rates.get(to_currency)
 
 
-def get_rates_for_sheet(currencies: list[str], to_currency: str = "JPY") -> dict[str, Optional[float]]:
+def get_rates_for_sheet(currencies: list[str], to_currency: str = "JPY") -> dict[str, float | None]:
     """複数通貨の JPY レートを一括取得する。
 
     シートに登録されている為替欄を自動更新する際に使用する。
@@ -78,7 +77,7 @@ def get_rates_for_sheet(currencies: list[str], to_currency: str = "JPY") -> dict
     Returns:
         {"USD": 155.43, "EUR": 168.21, ...}。取得失敗した通貨は None。
     """
-    result: dict[str, Optional[float]] = {}
+    result: dict[str, float | None] = {}
 
     # JPY ベースで一括取得（1 API コール）
     rates = get_all_rates(base=to_currency)
@@ -101,7 +100,7 @@ def get_rates_for_sheet(currencies: list[str], to_currency: str = "JPY") -> dict
     return result
 
 
-def get_all_rates(base: str = "JPY") -> Optional[dict[str, float]]:
+def get_all_rates(base: str = "JPY") -> dict[str, float] | None:
     """ベース通貨に対する全通貨レートを取得する。
 
     Returns:
@@ -155,7 +154,7 @@ def get_all_rates(base: str = "JPY") -> Optional[dict[str, float]]:
 
 # ── 内部実装 ─────────────────────────────────────────────────────────────────
 
-def _fetch_from_primary(base: str) -> Optional[dict[str, float]]:
+def _fetch_from_primary(base: str) -> dict[str, float] | None:
     """Frankfurter API からレートを取得する。"""
     url = f"{_PRIMARY_API}?from={base}"
     try:
@@ -170,7 +169,7 @@ def _fetch_from_primary(base: str) -> Optional[dict[str, float]]:
     return None
 
 
-def _fetch_from_fallback(base: str) -> Optional[dict[str, float]]:
+def _fetch_from_fallback(base: str) -> dict[str, float] | None:
     """open.er-api.com からレートを取得する（フォールバック）。"""
     url = f"{_FALLBACK_API}/{base}"
     try:
@@ -208,10 +207,30 @@ def _is_cache_valid(cache: _CacheDict, key: str) -> bool:
 
 # ── シート自動更新ヘルパー ────────────────────────────────────────────────────
 
+# 仕入先ドメイン → 通貨コードの対応表
+_DOMAIN_CURRENCY: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("USD", ("saksfifthavenue.com", "ssense.com", "neimanmarcus.com")),
+    ("GBP", ("harrods.com", "matchesfashion.com", "net-a-porter.com",
+             "selfridges.com", "mrporter.com", "harveynichols.com")),
+    ("EUR", ("luisaviaroma.com", "farfetch.com", "mytheresa.com",
+             "tessabit.com", "giglio.com", "biffi.com", "yoox.com",
+             "theoutnet.com", "24s.com")),
+)
+
+
+def _currency_from_url(url: str) -> str | None:
+    """仕入れURLのドメインから通貨コードを推定する（不明なら None）。"""
+    u = (url or "").lower()
+    for currency, domains in _DOMAIN_CURRENCY:
+        if any(d in u for d in domains):
+            return currency
+    return None
+
+
 def update_sheet_exchange_rates(
     manager,
     currencies: list[str] | None = None,
-) -> dict[str, Optional[float]]:
+) -> dict[str, float | None]:
     """シートの全レコードの為替欄をライブレートで更新する。
 
     Args:
@@ -237,14 +256,8 @@ def update_sheet_exchange_rates(
     updated = 0
     for record in records:
         # 各レコードの為替欄を更新（仕入れURLから通貨を推定）
-        url = record.仕入れURL.lower()
-        if "saksfifthavenue.com" in url or "ssense.com" in url or "neimanmarcus.com" in url:
-            cur = "USD"
-        elif "harrods.com" in url or "matchesfashion.com" in url or "net-a-porter.com" in url or "selfridges.com" in url or "mrporter.com" in url or "harveynichols.com" in url:
-            cur = "GBP"
-        elif "luisaviaroma.com" in url or "farfetch.com" in url or "mytheresa.com" in url or "tessabit.com" in url or "giglio.com" in url or "biffi.com" in url or "yoox.com" in url or "theoutnet.com" in url or "24s.com" in url:
-            cur = "EUR"
-        else:
+        cur = _currency_from_url(record.仕入れURL)
+        if cur is None:
             continue  # 判定できない場合はスキップ
 
         new_rate = rates.get(cur)

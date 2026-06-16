@@ -31,7 +31,6 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 from urllib.parse import quote_plus
 
 from lib.async_compat import run_sync
@@ -94,7 +93,7 @@ class ResearchCandidate:
     listing_count: int          # BUYMA上の競合出品数
     buyma_url: str              # BUYMAの商品/検索ページURL
     candidate_source_urls: list[str] = field(default_factory=list)
-    style_id: Optional[str] = None  # 詳細ページから抽出した型番（fetch_style_ids 時）
+    style_id: str | None = None  # 詳細ページから抽出した型番（fetch_style_ids 時）
 
     @property
     def is_recommended_brand(self) -> bool:
@@ -390,7 +389,7 @@ class BUYMAResearcher:
 
         return candidates
 
-    async def _parse_item_element(self, el, source_url: str) -> Optional[ResearchCandidate]:
+    async def _parse_item_element(self, el, source_url: str) -> ResearchCandidate | None:
         """DOM 要素1つから ResearchCandidate を生成する。"""
         # テキスト全体を取得してパース
         text = (await el.inner_text()).strip()
@@ -470,10 +469,13 @@ class BUYMAResearcher:
                 continue
             if recommended_only and not c.is_recommended_brand:
                 continue
-            if stable_category_only and not c.is_stable_category:
-                # 推奨ブランドかつお気に入り多数なら定番カテゴリ外でも許容
-                if not (c.is_recommended_brand and c.favorites_count >= 20):
-                    continue
+            # 推奨ブランドかつお気に入り多数なら定番カテゴリ外でも許容
+            if (
+                stable_category_only
+                and not c.is_stable_category
+                and not (c.is_recommended_brand and c.favorites_count >= 20)
+            ):
+                continue
             result.append(c)
         return result
 

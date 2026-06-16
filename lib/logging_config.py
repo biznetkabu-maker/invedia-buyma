@@ -28,6 +28,7 @@ class JSONFormatter(logging.Formatter):
     """JSON 形式のログフォーマッター。"""
 
     def format(self, record: logging.LogRecord) -> str:
+        """ログレコードを JSON 文字列に整形する。"""
         entry = {
             "timestamp": datetime.fromtimestamp(
                 record.created, tz=timezone.utc
@@ -92,13 +93,16 @@ class SiteMetrics:
 
     @property
     def success_rate(self) -> float:
+        """成功率（0.0〜1.0、試行0なら0）。"""
         return self.success / self.total if self.total > 0 else 0.0
 
     @property
     def avg_response_time(self) -> float:
+        """平均レスポンス時間（秒、試行0なら0）。"""
         return self.total_response_time / self.total if self.total > 0 else 0.0
 
     def to_dict(self) -> dict:
+        """メトリクスを辞書に変換する（JSON 出力用）。"""
         return {
             "site": self.site,
             "total": self.total,
@@ -122,6 +126,7 @@ class ScrapeMetrics:
     def record(
         self, site: str, *, success: bool, response_time: float = 0.0
     ) -> None:
+        """1 件のスクレイプ結果をサイト別に記録する（スレッドセーフ）。"""
         with self._lock:
             if site not in self.sites:
                 self.sites[site] = SiteMetrics(site=site)
@@ -137,6 +142,7 @@ class ScrapeMetrics:
                 m.max_response_time = max(m.max_response_time, response_time)
 
     def summary(self) -> dict:
+        """全サイトの集計サマリを辞書で返す。"""
         elapsed = time.time() - self.start_time
         total = sum(m.total for m in self.sites.values())
         success = sum(m.success for m in self.sites.values())
@@ -150,6 +156,7 @@ class ScrapeMetrics:
         }
 
     def log_summary(self) -> None:
+        """集計サマリをロガーに出力する。"""
         s = self.summary()
         logger = logging.getLogger("scrape_metrics")
         logger.info(

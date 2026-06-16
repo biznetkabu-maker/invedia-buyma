@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,8 @@ class ProductInsight:
     商品名: str
     ブランド: str
     在庫ステータス: str
-    利益額: Optional[float]
-    利益率: Optional[float]
+    利益額: float | None
+    利益率: float | None
     仕入れURL: str
     備考: str = ""
 
@@ -46,7 +46,7 @@ class SheetAnalysisReport:
     profitable_rows: int
     below_target_profit_rows: int
     missing_price_rows: int
-    avg_profit_jpy: Optional[float]
+    avg_profit_jpy: float | None
     top_profit: list[ProductInsight] = field(default_factory=list)
     lowest_profit: list[ProductInsight] = field(default_factory=list)
     needs_attention: list[ProductInsight] = field(default_factory=list)
@@ -68,12 +68,12 @@ class SheetAnalysisReport:
 
 def _insight_from_record(
     record: ProductRecord,
-    breakdown: Optional[ProfitBreakdown],
+    breakdown: ProfitBreakdown | None,
     *,
     note: str = "",
 ) -> ProductInsight:
-    profit_val: Optional[float] = None
-    rate_val: Optional[float] = None
+    profit_val: float | None = None
+    rate_val: float | None = None
     if breakdown is not None:
         profit_val = breakdown.profit
         rate_val = breakdown.profit_rate
@@ -139,7 +139,7 @@ def analyze_records(
             if breakdown.profit_rate < target_profit_rate:
                 below_target += 1
 
-        def _add_attention(note: str) -> None:
+        def _add_attention(note: str, record=record, breakdown=breakdown) -> None:
             key = record.商品名 or f"__row_{len(needs_attention)}"
             if key in attention_seen:
                 return
@@ -158,7 +158,7 @@ def analyze_records(
     top_profit = [item for _, item in scored[:top_n]]
     lowest_profit = [item for _, item in sorted(scored, key=lambda x: x[0])[:top_n]]
 
-    avg_profit: Optional[float] = None
+    avg_profit: float | None = None
     if profits:
         avg_profit = round(sum(profits) / len(profits), 2)
 

@@ -16,13 +16,12 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from lib.scraper.engine import PriceScraper
 from lib.scraper.models import ScrapedResult
-from lib.scraper.utils import parse_price_string
+from lib.scraper.strategies.generic import GenericStrategy
 from lib.scraper.strategies.ssense import SSENSEStrategy
 from lib.scraper.strategies.tessabit import TESSABITStrategy
-from lib.scraper.strategies.generic import GenericStrategy
-from lib.scraper.engine import PriceScraper
-
+from lib.scraper.utils import parse_price_string
 
 # ---------------------------------------------------------------------------
 # ヘルパー: モックページ生成
@@ -329,8 +328,9 @@ def _make_mock_playwright_ctx():
 
     browser.close() / context.close() など全ての await 呼び出しを AsyncMock にする。
     """
-    import lib.scraper.engine as eng_module
     from contextlib import asynccontextmanager
+
+    import lib.scraper.engine as eng_module
 
     fake_browser = MagicMock()
     fake_browser.close = AsyncMock()
@@ -360,9 +360,8 @@ class TestPriceScraper(unittest.IsolatedAsyncioTestCase):
         async def _fake(u, browser, strategy):
             return expected
 
-        with _make_mock_playwright_ctx():
-            with patch.object(scraper, "_scrape_with_browser", new=_fake):
-                result = await scraper.scrape_async(url)
+        with _make_mock_playwright_ctx(), patch.object(scraper, "_scrape_with_browser", new=_fake):
+            result = await scraper.scrape_async(url)
 
         self.assertTrue(result.success)
         self.assertAlmostEqual(result.price, 1550.0)
@@ -377,9 +376,8 @@ class TestPriceScraper(unittest.IsolatedAsyncioTestCase):
         async def _fail(u, browser, strategy):
             raise RuntimeError("network error")
 
-        with _make_mock_playwright_ctx():
-            with patch.object(scraper, "_scrape_with_browser", new=_fail):
-                result = await scraper.scrape_async(url)
+        with _make_mock_playwright_ctx(), patch.object(scraper, "_scrape_with_browser", new=_fail):
+            result = await scraper.scrape_async(url)
 
         self.assertFalse(result.success)
         self.assertIn("network error", result.error)
@@ -401,9 +399,8 @@ class TestPriceScraper(unittest.IsolatedAsyncioTestCase):
                 scraped_at=datetime.now(timezone.utc), success=True,
             )
 
-        with _make_mock_playwright_ctx():
-            with patch.object(scraper, "_scrape_with_browser", new=_ok):
-                results = await scraper.scrape_many_async(urls, concurrency=2)
+        with _make_mock_playwright_ctx(), patch.object(scraper, "_scrape_with_browser", new=_ok):
+            results = await scraper.scrape_many_async(urls, concurrency=2)
 
         self.assertEqual(len(results), 2)
         self.assertTrue(all(r.success for r in results))

@@ -26,9 +26,9 @@
 import asyncio
 import os
 import unittest
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
+from lib.scraper.engine import PriceScraper
 from lib.scraper.stealth import (
     LAUNCH_ARGS,
     STEALTH_INIT_SCRIPT,
@@ -37,24 +37,22 @@ from lib.scraper.stealth import (
     random_wait_ms,
     stealth_context_options,
 )
+from lib.scraper.strategies.biffi import BIFFIStrategy
 from lib.scraper.strategies.farfetch import FARFETCHStrategy
-from lib.scraper.strategies.matchesfashion import MATCHESFASHIONStrategy
-from lib.scraper.strategies.mytheresa import MYTHERESAStrategy
-from lib.scraper.strategies.selfridges import SELFRIDGESStrategy
-from lib.scraper.strategies.saks import SAKSStrategy
+from lib.scraper.strategies.giglio import GIGLIOStrategy
 from lib.scraper.strategies.harrods import HARRODSStrategy
 from lib.scraper.strategies.harveynichols import HARVEYNICHOLSStrategy
-from lib.scraper.strategies.neimanmarcus import NEIMANMARCUSStrategy
 from lib.scraper.strategies.luisaviaroma import LUISAVIAROMAStrategy
-from lib.scraper.strategies.giglio import GIGLIOStrategy
-from lib.scraper.strategies.biffi import BIFFIStrategy
-from lib.scraper.strategies.netaporter import NETAPORTERStrategy
+from lib.scraper.strategies.matchesfashion import MATCHESFASHIONStrategy
 from lib.scraper.strategies.mrporter import MRPORTERStrategy
-from lib.scraper.strategies.yoox import YOOXStrategy
+from lib.scraper.strategies.mytheresa import MYTHERESAStrategy
+from lib.scraper.strategies.neimanmarcus import NEIMANMARCUSStrategy
+from lib.scraper.strategies.netaporter import NETAPORTERStrategy
+from lib.scraper.strategies.saks import SAKSStrategy
+from lib.scraper.strategies.selfridges import SELFRIDGESStrategy
 from lib.scraper.strategies.theoutnet import THEOUTNETStrategy
 from lib.scraper.strategies.twentyfoursevens import TWENTYFOURSStrategy
-from lib.scraper.engine import PriceScraper
-
+from lib.scraper.strategies.yoox import YOOXStrategy
 
 # ---------------------------------------------------------------------------
 # ヘルパー: モックページ生成
@@ -387,7 +385,7 @@ class TestEngineStealthEnabled(unittest.IsolatedAsyncioTestCase):
     async def test_stealth_context_options_used_when_enabled(self):
         """use_stealth=True のとき _scrape_with_browser に stealth UA が渡る。"""
         from unittest.mock import patch
-        from lib.scraper.models import ScrapedResult
+
         import lib.scraper.engine as eng
 
         captured = {}
@@ -426,6 +424,7 @@ class TestEngineStealthEnabled(unittest.IsolatedAsyncioTestCase):
     async def test_non_stealth_uses_fixed_ua(self):
         """use_stealth=False のとき固定 UA が使われる。"""
         from unittest.mock import patch
+
         import lib.scraper.engine as eng
 
         captured = {}

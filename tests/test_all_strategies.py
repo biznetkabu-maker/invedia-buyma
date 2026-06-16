@@ -26,7 +26,6 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 
 from playwright.async_api import async_playwright
 
@@ -159,11 +158,11 @@ class SiteTestResult:
     url: str
     success: bool
     elapsed_ms: int
-    status_code: Optional[int] = None
-    price: Optional[float] = None
-    currency: Optional[str] = None
-    stock_status: Optional[str] = None
-    error: Optional[str] = None
+    status_code: int | None = None
+    price: float | None = None
+    currency: str | None = None
+    stock_status: str | None = None
+    error: str | None = None
 
     @property
     def icon(self) -> str:
