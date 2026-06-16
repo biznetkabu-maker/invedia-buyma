@@ -26,7 +26,7 @@ include = ["lib*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "--cov=lib --cov-report=term-missing:skip-covered --cov-report=html:htmlcov --cov-fail-under=65"
+addopts = "--cov=lib --cov-report=term-missing:skip-covered --cov-report=html:htmlcov --cov-fail-under=72"
 
 [tool.ruff]
 target-version = "py310"
